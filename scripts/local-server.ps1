@@ -1,6 +1,9 @@
 # Windows PowerShell 5.1 helper for the root batch files. No administrator rights needed.
 [CmdletBinding()]
-param([Parameter(Mandatory = $true)][ValidateSet('start', 'stop', 'restart')][string]$Action)
+param(
+    [Parameter(Mandatory = $true)][ValidateSet('start', 'stop', 'restart')][string]$Action,
+    [ValidateSet('demo', 'live')][string]$Mode = 'demo'
+)
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -104,7 +107,7 @@ function Start-Server {
     $owned = @(Get-OwnedProcesses (Read-State))
     if ($owned.Count) {
         Write-Host "A batch-managed server is already running. Open $Url"
-        Write-Host 'Use restart.bat if it is not responding.'
+        Write-Host 'Use restart.bat for demo mode or restart-live.bat for live mode.'
         return
     }
     if (@(Get-Listeners).Count) {
@@ -114,14 +117,21 @@ function Start-Server {
         throw 'Python environment missing. Follow README.md > Fresh setup, then run start.bat again.'
     }
     New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null
-    # These variables apply only to this helper and its child process. Do not
-    # load or edit .env, call model providers, or enable remote tracing for demos.
-    $env:PYTHON_DOTENV_DISABLED = '1'
-    $env:EVIDENCE_ATLAS_MODE = 'demo'
+    # These variables apply only to this helper and its child process. Live mode
+    # allows the app to load its existing .env; never print or edit credentials.
+    if ($Mode -eq 'live') {
+        Remove-Item Env:PYTHON_DOTENV_DISABLED -ErrorAction SilentlyContinue
+    } else {
+        $env:PYTHON_DOTENV_DISABLED = '1'
+    }
+    $env:EVIDENCE_ATLAS_MODE = $Mode
     $env:VECTOR_BACKEND = 'memory'
     $env:LANGCHAIN_TRACING_V2 = 'false'
     $env:LANGSMITH_TRACING = 'false'
-    Write-Host 'Starting Evidence Atlas RAG in demo/memory mode...'
+    Write-Host "Starting Evidence Atlas RAG in $Mode/memory mode..."
+    if ($Mode -eq 'live') {
+        Write-Host 'Live document indexing and questions use your configured providers and may incur API charges.'
+    }
     $launched = Start-Process -FilePath $Python -ArgumentList $ServerArguments -WorkingDirectory $ProjectRoot `
         -WindowStyle Hidden -RedirectStandardOutput $StdoutFile -RedirectStandardError $StderrFile -PassThru
     $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($launched.Id)"
@@ -137,16 +147,26 @@ function Start-Server {
         Save-State $owned
         $listeners = @(Get-Listeners | Where-Object { $_.OwningProcess -in $owned.ProcessId })
         if ($listeners.Count) {
+            $status = $null
             try {
                 $status = Invoke-RestMethod -Uri "$Url/api/status" -TimeoutSec 2
-                if ($status.mode -eq 'demo' -and $status.vector_backend -eq 'memory') {
-                    Write-Host "Ready: $Url"
-                    Write-Host 'Click Explore CMS guidance to load the sample. No API key is needed.'
-                    Write-Host "Logs: $RuntimeDir"
-                    Write-Host 'You can close this launcher window. Use stop.bat to stop the server.'
-                    return
-                }
             } catch { } # Retry while the server finishes initializing.
+            if ($status -and $status.mode -eq $Mode -and $status.vector_backend -eq 'memory') {
+                if (-not $status.configured) {
+                    Stop-Server
+                    throw "Configuration is incomplete: $($status.configuration_message)"
+                }
+                Write-Host "Ready: $Url"
+                if ($Mode -eq 'live') {
+                    Write-Host 'Live mode is configured locally; API access and billing have not been tested.'
+                    Write-Host 'Refresh the browser, confirm LIVE MODE, and reload your documents to build the semantic index.'
+                } else {
+                    Write-Host 'Click Explore CMS guidance to load the sample. No API key is needed.'
+                }
+                Write-Host "Logs: $RuntimeDir"
+                Write-Host 'You can close this launcher window. Use stop.bat to stop the server.'
+                return
+            }
         }
         Start-Sleep -Milliseconds 300
     }

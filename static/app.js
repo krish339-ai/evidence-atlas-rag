@@ -74,6 +74,7 @@ function renderCollection() {
   $('#clear-collection').hidden = !collection;
   if (!collection) {
     $('#library-info').textContent = 'Your collection stays in server memory until you clear it or restart.';
+    renderSuggestions();
     return;
   }
   $('#library-info').textContent = `${collection.pages} pages · ${collection.chunks} passages indexed. Select the documents you want to explore.`;
@@ -86,6 +87,7 @@ function renderCollection() {
     label.append(check, detail);
     $('#paper-list').append(label);
   });
+  renderSuggestions();
 }
 function resetOutput() {
   $('#question').value = ''; $('#compare-toggle').checked = false;
@@ -109,13 +111,23 @@ function renderSampleContext() {
     const details = node('details'); details.append(node('summary', '', 'Scope and source dates'), node('p', '', sample.scope)); context.append(details);
     $('#sample-select').value = sample.id;
   }
-  const starters = sample?.questions || (!collection ? status?.samples?.find(s => s.id === status.default_sample)?.questions : []) || [];
-  $('.suggestions').replaceChildren();
-  starters.forEach(item => {
-    const button = node('button', '', item.question + ' ↗'); button.dataset.question = item.question; button.dataset.compare = String(!!item.comparison); $('.suggestions').append(button);
-  });
   $('#matrix-description').textContent = sample?.id === 'cms-ma' ? 'Inpatient coverage, outpatient review, documentation, and timeframes.' : 'Methods, datasets, findings, and limitations.';
   $('#matrix-warning').textContent = sample?.comparison_note || 'Retrieved excerpts require interpretation and source review.';
+}
+function renderSuggestions() {
+  const ids = selected();
+  const starters = collection ? (collection.sample?.questions || collection.questions || [])
+    .filter(item => !item.paper_id || ids.includes(item.paper_id))
+    : status?.samples?.find(s => s.id === status.default_sample)?.questions || [];
+  $('.suggestions').replaceChildren();
+  $('#suggestion-panel').hidden = !starters.length;
+  starters.forEach(item => {
+    const button = node('button', '', item.question + ' ↗');
+    button.type = 'button'; button.dataset.question = item.question;
+    button.dataset.compare = String(!!item.comparison);
+    if (item.title) button.title = 'Suggested from ' + item.title;
+    $('.suggestions').append(button);
+  });
 }
 function loadDemo(sampleId = 'cms-ma') {
   openWorkspace();
@@ -176,7 +188,7 @@ function renderAnswer(question, result) {
   $('#welcome').hidden = true;
   const target = $('#answer'); target.replaceChildren();
   target.append(node('h2', 'answer-question', question));
-  const labels = { excerpts: 'SOURCE EXCERPTS · LOCAL MODE', answered: 'CITED ANSWER', insufficient: 'INSUFFICIENT EVIDENCE', error: 'MODEL UNAVAILABLE' };
+  const labels = { excerpts: 'SOURCE EXCERPTS · LOCAL MODE', answered: 'CITED ANSWER', insufficient: 'INSUFFICIENT EVIDENCE', unverified: 'ANSWER NOT VERIFIED', error: 'MODEL UNAVAILABLE' };
   target.append(node('div', `answer-status ${result.status}`, labels[result.status] || result.status), node('p', 'answer-message', result.message));
   if (result.scope) target.append(node('p', 'matrix-warning', result.scope));
   if ($('#compare-toggle').checked) target.append(node('p', 'matrix-warning', $('#matrix-warning').textContent));
@@ -199,6 +211,7 @@ function renderAnswer(question, result) {
 }
 async function submitQuestion(event) {
   event?.preventDefault();
+  if (working) return;
   const question = $('#question').value.trim();
   if (!question) return;
   await task('Retrieving evidence and checking the trail…', async () => {
@@ -209,7 +222,18 @@ async function submitQuestion(event) {
       body: JSON.stringify({ question, paper_ids: selected(), comparison }),
     });
     renderAnswer(question, result);
+    const input = $('#question');
+    if (result.status !== 'error' && input.value.trim() === question) input.value = '';
+    input.focus({ preventScroll: true });
   });
+}
+function runSuggestedQuestion(event) {
+  const button = event.target.closest('[data-question]');
+  if (!button || working) return;
+  $('#question').value = button.dataset.question;
+  $('#compare-toggle').checked = button.dataset.compare === 'true';
+  $('#question').focus();
+  if (collection) return submitQuestion();
 }
 async function buildMatrix() {
   await task('Finding source passages for the selected documents…', async () => {
@@ -259,18 +283,28 @@ async function loadEvaluation() {
     });
   } catch (error) { target.replaceChildren(node('p', 'eval-note', error.message)); }
 }
-function exportTrail() {
-  if (!currentAnswer) return;
-  const a = currentAnswer;
+function researchTrailMarkdown(a) {
   let text = `# Evidence Atlas RAG research trail\n\nQuestion: ${a.question}\n\nMode: ${a.mode} | Status: ${a.status}\n\n${a.message}\n\n`;
   if (a.scope) text += `Scope: ${a.scope}\n\n`;
+  if (a.reason) text += `Validation result: ${a.reason}\n\n`;
   a.claims.forEach(claim => {
     const e = a.evidence.find(item => item.id === claim.evidence_id);
     text += `## ${claim.kind}\n\n${claim.text}\n\nSource: ${e.title}, PDF page ${e.page} (${e.filename}).\n\n`;
     if (claim.kind !== 'Source excerpt') text += `Supporting quote: ${claim.quote}\n\n`;
     if (e.url) text += `${e.url}\n\n`;
   });
-  text += `\n${$('#matrix-warning').textContent}\n`;
+  text += '## Retrieved passages\n\nThese are retrieval candidates, not verified answers.\n\n';
+  a.evidence.forEach(e => {
+    text += `### ${e.id} — ${e.title}, PDF page ${e.page}\n\nFile: ${e.filename}\n\n${e.text}\n\n`;
+    if (e.url) text += `${e.url}\n\n`;
+  });
+  text += '## Retrieval workflow\n\n';
+  (a.trace || []).forEach(step => { text += `- ${step}\n`; });
+  return text + '\nRetrieved excerpts require interpretation and source review.\n';
+}
+function exportTrail() {
+  if (!currentAnswer) return;
+  const text = researchTrailMarkdown(currentAnswer);
   const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
   const link = node('a'); link.href = url; link.download = 'evidence-atlas-rag-research-trail.md'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -289,11 +323,8 @@ $('#file-input').addEventListener('change', event => upload(event.target.files))
 $('#question-form').addEventListener('submit', submitQuestion);
 $('#question').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitQuestion(); } });
 $('#build-matrix').addEventListener('click', buildMatrix);
-$('.suggestions').addEventListener('click', event => {
-  const button = event.target.closest('[data-question]'); if (!button) return;
-  $('#question').value = button.dataset.question; $('#compare-toggle').checked = button.dataset.compare === 'true';
-  $('#question').focus(); if (collection) submitQuestion();
-});
+$('.suggestions').addEventListener('click', runSuggestedQuestion);
+$('#paper-list').addEventListener('change', renderSuggestions);
 $('#load-selected-sample').addEventListener('click', () => loadDemo($('#sample-select').value));
 $('#clear-collection').addEventListener('click', () => task('Clearing your collection…', async () => {
   const remoteNamespace = collection?.namespace;
@@ -306,7 +337,7 @@ zone.addEventListener('dragover', event => { event.preventDefault(); zone.classL
 zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
 zone.addEventListener('drop', event => { event.preventDefault(); zone.classList.remove('dragover'); if (!working) upload(event.dataTransfer.files); });
 api('/api/status').then(result => {
-  status = result; renderSampleContext();
+  status = result; renderSampleContext(); renderSuggestions();
   $('#mode-badge').textContent = status.mode === 'live' ? `LIVE MODE · ${status.vector_backend.toUpperCase()}` : 'LOCAL EXCERPT MODE';
   $('#privacy-note').textContent = status.mode === 'live' ? 'Live mode: document text is sent to your configured embedding provider. Questions and retrieved passages are sent to your model provider. Collections are not saved to disk.' : 'Local mode: no model calls and no document text leaves this server. Answers are verbatim excerpts, using lexical retrieval. Enable live mode for semantic search and synthesis.';
   if (status.vector_backend === 'pinecone') $('#privacy-note').append(node('p', '', 'Pinecone stores vectors and passage text remotely in an isolated namespace. PDFs and session state remain local; remote vectors alone do not restore a collection after restart.'));

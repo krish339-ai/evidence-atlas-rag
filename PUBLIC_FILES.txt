@@ -11,6 +11,7 @@ run.cmd
 start.bat
 stop.bat
 restart.bat
+restart-live.bat
 scripts/local-server.ps1
 papertrail/__init__.py
 papertrail/config.py
@@ -29,6 +30,8 @@ scripts/download_papers.py
 scripts/evaluate.py
 scripts/check_publication.py
 tests/test_pipeline.py
+tests/test_export.cjs
+tests/test_suggestions.py
 tests/conftest.py
 tests/test_pinecone.py
 data/sources.json
@@ -46,6 +49,7 @@ docs/COMPATIBILITY.md
 docs/VERIFICATION.md
 docs/PUBLICATION.md
 papertrail/samples.py
+papertrail/suggestions.py
 data/cms-sources.json
 scripts/evaluate_healthcare.py
 tests/test_healthcare.py

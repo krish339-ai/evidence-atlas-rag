@@ -15,6 +15,7 @@ from papertrail.graph import ask
 from papertrail.ingest import MAX_BYTES, ResearchPDFLoader, chunk_pages
 from papertrail.retrieval import Index, tokens
 from papertrail.samples import DEFAULT_SAMPLE, catalog, sample_info, sources, select_sections, verify_source
+from papertrail.suggestions import starter_questions
 
 ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title='Evidence Atlas RAG', version='0.1.0')
@@ -63,6 +64,7 @@ def create_collection(files, source_metadata=None, sample_id=None):
         collections[cid] = dict(index=index, papers=papers, raw=raw, pages=pages, sample_id=sample_id)
     return {'id': cid, 'papers': papers, 'chunks': len(chunks), 'pages': len({(d.metadata['paper_id'], d.metadata['page']) for d in pages}), 'mode': settings.mode,
             'sample': sample_info(sample_id) if sample_id else None,
+            'questions': starter_questions(chunks) if not sample_id else [],
             'vector_backend': index.backend, 'namespace': index.namespace}
 
 

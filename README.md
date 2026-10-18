@@ -16,11 +16,12 @@ Complete **Fresh setup** below once. Then double-click a batch file in the proje
 |---|---|
 | `start.bat` | Starts the app in the background, checks that it is ready, and prints the local URL. Running it again does not create another server. |
 | `stop.bat` | Stops the server started by these batch files for this project. Running it when the server is already stopped is harmless. |
-| `restart.bat` | Stops the managed server and starts it again. Use this after application code changes. |
+| `restart.bat` | Stops the managed server and starts it again in demo/memory mode. |
+| `restart-live.bat` | Stops the managed server and starts it in live/memory mode using your existing provider configuration. Requires `MODEL_API_KEY`; document indexing and questions can incur API charges. |
 
 Open <http://127.0.0.1:8000>. Click **Explore CMS guidance**, then ask a question or build a reading matrix. You can close the launcher window after it reports ready; the app keeps running until you use `stop.bat` or shut down Windows.
 
-The batch files use **demo/memory mode**, disable remote tracing, and skip loading `.env`. No model credentials or paid API calls are needed. They do not change your saved configuration. Stopping or restarting clears loaded documents, questions, and other in-memory collection state; reload your sample or PDFs afterward.
+`start.bat` and `restart.bat` use **demo/memory mode**, disable remote tracing, and skip loading `.env`. No model credentials or paid API calls are needed for those launchers. `restart-live.bat` explicitly selects **live/memory mode**, allows the app to load its existing `.env`, and keeps remote tracing disabled. None of the launchers edits your saved configuration. Stopping or restarting clears loaded documents, questions, and other in-memory collection state; reload your sample or PDFs afterward.
 
 You can also run them from PowerShell. Add `--no-pause` to skip the final keypress prompt:
 
@@ -29,6 +30,14 @@ You can also run them from PowerShell. Add `--no-pause` to skip the final keypre
 .\stop.bat --no-pause
 .\restart.bat --no-pause
 ```
+
+To test generated answers, save your provider configuration locally as described under **Two honest operating modes**, then double-click `restart-live.bat` or run:
+
+```powershell
+.\restart-live.bat --no-pause
+```
+
+Refresh the browser and confirm **LIVE MODE · MEMORY** before loading documents again. Live indexing sends document text to the configured embedding provider; questions and retrieved passages go to the model provider. The launcher checks local configuration and server readiness only; it does not make a paid test request or establish that your account has available API credit. If the key is missing, it stops the newly started server and reports a configuration error. Use `stop.bat` to stop either managed mode, or `restart.bat` to return to demo mode.
 
 The files work from any current directory, including project paths containing spaces. They use the included `scripts/local-server.ps1` helper and Windows PowerShell; no administrator rights are needed. The execution-policy override applies only to that helper process, not your permanent system policy. Organization policies may still prevent scripts from running.
 
@@ -99,6 +108,8 @@ The current snapshot contains 65 PDF pages and 222 chunks. `scripts/download_pap
 
 Uploads accept 1–8 text-based PDFs, up to 20 MB and 200 pages each. The LangChain `BaseLoader` implementation uses pypdf, normalizes whitespace and line hyphenation, removes short repeated boilerplate where detected, and retains one-based physical PDF page numbers. It preserves filenames, content-derived paper IDs, source versions, and chunk offsets. Scans need OCR before upload. Complex tables, figures, equations, and multi-column layouts may extract poorly: inspect the original page.
 
+After an upload finishes, **Try a question** shows up to eight starter questions drawn from sections and repeated terms in the uploaded text. Click a question to submit it immediately. Suggestions reflect the selected PDFs and remain available after each response. Creating them requires no extra model request; clicking one follows the normal demo or live answer flow. These are starting points, not guarantees that a complete answer exists. After a completed response, the question box clears for your next question. Connection/provider errors retain the question for retry, and text you type while waiting is preserved.
+
 The recursive splitter uses **1,400 characters / 200 characters overlap**, within each page. These are character counts, not token counts, and are an initial choice to evaluate jointly with the embedding model.
 
 ## Retrieval and graph
@@ -113,7 +124,9 @@ Question -> dense + sparse ranks -> reciprocal rank fusion (top 6)
               | weak -> expand once to 12 -> recheck -> answer or insufficient evidence
 ```
 
-Comparisons reserve coverage for selected papers. If more than six papers are selected, the first pass may need expansion to cover them. Quote validation checks that the evidence ID resolves and the quote exists in that passage; a second model call checks whether the whole claim is supported. This is a useful defense, not a proof of semantic correctness. Every accepted generated claim is labeled `Reported finding` or `Interpretation`; uncited model explanations are never surfaced.
+Comparisons reserve coverage for selected papers. If more than six papers are selected, the first pass may need expansion to cover them. In live mode, the model writes claims and selects evidence IDs. The application attaches each cited passage's original text as the supporting quote, avoiding punctuation corruption from model transcription. Citation and quote validation still run, and a second model call checks whether the passage supports the whole claim. This is a useful defense, not a proof of semantic correctness. Every accepted generated claim is labeled `Reported finding` or `Interpretation`; uncited model explanations are never surfaced.
+
+`ANSWER NOT VERIFIED` means a draft failed citation, completeness, or evidence-audit checks; the message identifies the failed check. This differs from retrieval finding insufficient evidence or the model reporting insufficient support. Rejected claims are withheld. **Export trail** includes retrieved passages, page references, the workflow, and the rejection reason even when no answer was accepted. Exports contain source document text; treat them with the same care as the original PDFs.
 
 The reading matrix is **retrieved excerpts**, not a generated comparative conclusion. Its four dimensions are methods, datasets, findings, and limitations. Missing matches are explicit. Neither it nor the question view claims that differing experiments are directly comparable.
 
@@ -124,11 +137,13 @@ The displayed workflow trace is local application data. LangSmith remote tracing
 ## Tests and measured evaluation
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest tests -q
 .\.venv\Scripts\python.exe -m scripts.evaluate
 ```
 
-The latest run passed **38 tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, and the optional Pinecone adapter using mocks. Mocked live tests are not real provider validation.
+With Node.js installed, run `node --test tests/test_export.cjs` for the browser export, suggestion-button, and question-box regression tests. Node.js is not required to run the application.
+
+The latest run passed **50 Python tests and 7 browser-function tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, exact Unicode source quotes, specific validation failures, audit assessment before the final decision, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, the optional Pinecone adapter using mocks, source-derived upload suggestions, one-click submission, question-box clearing and draft preservation, and exports with or without accepted answers. Mocked live tests are not real provider validation.
 
 The [evaluation report](evaluation/REPORT.md) and [raw results](evaluation/results.json) record 14 questions, including 10 evidence-annotated direct/cross-paper questions and 4 fallback/ambiguous/adversarial cases:
 

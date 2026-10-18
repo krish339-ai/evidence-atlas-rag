@@ -14,7 +14,7 @@ The starter corpus consists of version-pinned RAG, Self-RAG, and CRAG PDFs from 
 
 ## Prompts and agent instructions
 
-`papertrail/graph.py` contains the actual answer system prompt and evidence-audit prompt. The answer prompt treats passages as untrusted data, requires a quote and evidence ID per claim, separates reported findings from interpretation, rejects unsupported conclusions, and warns against comparing incompatible experiments. The model returns a structured schema; the application never displays uncited explanation text.
+`papertrail/graph.py` contains the actual answer system prompt and evidence-audit prompt. The answer prompt treats passages as untrusted data, requires an evidence ID per claim, separates reported findings from interpretation, rejects unsupported conclusions, and warns against comparing incompatible experiments. The model returns a structured schema of claims and source IDs. The application copies each cited passage verbatim into its claim's quote before citation validation and the separate evidence audit; the model does not transcribe source punctuation. The audit schema places its evidence assessment before its final decision, and the prompt recognizes facts directly established by headings and list entries. Unverified drafts are withheld and receive a specific rejection reason. The application never displays uncited explanation text.
 
 Codex assisted with implementation, dependency debugging, browser inspection, and tests. The development process used official API references and checked the research workspace with deterministic tests and visual inspection.
 

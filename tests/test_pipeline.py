@@ -1,4 +1,5 @@
 import io
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +9,7 @@ from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
 
 from papertrail.config import Settings
 from papertrail.comparison import matrix_passage
-from papertrail.graph import Audit, Claim, Draft, ask, validate_claims
+from papertrail.graph import Audit, Claim, Draft, SourceClaim, SourceDraft, ask, validate_claims
 from papertrail.ingest import ResearchPDFLoader, chunk_pages
 from papertrail.retrieval import Index
 from papertrail import server
@@ -86,12 +87,21 @@ def test_citation_validation_rejects_fabricated_quotes_and_ids():
     assert not validate_claims(valid, evidence)
 
 
+def test_audit_schema_assesses_evidence_before_final_verdict():
+    # A real provider produced supported=false before a reason concluding true.
+    # Keep the reason first in the provider's structured-output schema.
+    from langchain_core.utils.function_calling import convert_to_openai_function
+    schema = convert_to_openai_function(Audit)['parameters']
+    assert list(schema['properties']) == ['reason', 'supported']
+    assert set(schema['required']) == {'reason', 'supported'}
+
+
 def test_rejected_model_explanation_never_leaks(index, monkeypatch):
     class FakeModel:
         def __init__(self, **kwargs): pass
         def with_structured_output(self, schema, **kwargs): return self
         def invoke(self, messages):
-            return Draft(sufficient=False, explanation='UNSUPPORTED SECRET CLAIM', claims=[])
+            return SourceDraft(sufficient=False, claims=[], explanation='UNSUPPORTED SECRET CLAIM')
     monkeypatch.setattr('papertrail.graph.ChatOpenAI', FakeModel)
     result = ask(index, Settings(mode='live', api_key='fake'), 'method retrieval', ['alpha'])
     assert result['status'] == 'insufficient'
@@ -107,11 +117,83 @@ def test_live_branch_with_mock_provider(index, monkeypatch, audit_supported):
         def invoke(self, messages):
             if self.schema is Audit:
                 return Audit(supported=audit_supported, reason='mock check')
-            return Draft(sufficient=True, explanation='UNVALIDATED TEXT', claims=[Claim(text='Alpha uses sparse retrieval.', evidence_id='E1', quote='The Alpha method uses sparse retrieval.')])
+            return SourceDraft(sufficient=True, claims=[SourceClaim(text='Alpha uses sparse retrieval.', evidence_id='E1')])
     monkeypatch.setattr('papertrail.graph.ChatOpenAI', FakeModel)
     result = ask(index, Settings(mode='live', api_key='fake'), 'Alpha sparse retrieval', ['alpha'])
-    assert result['status'] == ('answered' if audit_supported else 'insufficient')
+    assert result['status'] == ('answered' if audit_supported else 'unverified')
     assert 'UNVALIDATED TEXT' not in str(result)
+
+
+@pytest.mark.parametrize('audit_supported', [True, False])
+def test_live_quotes_are_copied_from_source_and_still_audited(monkeypatch, audit_supported):
+    # Synthetic fixture: no private resume content belongs in regression tests.
+    source = 'B.Sc., Physics — Example University, 2010 – 2014\nResearch: “Optics” • laboratory work.'
+    doc = Document(page_content=source, metadata={'paper_id': 'education', 'chunk_id': 'education:1', 'page': 1})
+    index = Index([doc], Settings(mode='demo'))
+    calls = []
+
+    class FakeModel:
+        def __init__(self, **kwargs): pass
+        def with_structured_output(self, schema, **kwargs):
+            self.schema = schema; return self
+        def invoke(self, messages):
+            calls.append(self.schema)
+            payload = json.loads(messages[1][1])
+            assert '—' in messages[1][1] and '\\u2014' not in messages[1][1]
+            if self.schema is Audit:
+                assert payload['answer']['claims'][0]['quote'] == source
+                return Audit(supported=audit_supported, reason='UNVALIDATED AUDIT TEXT')
+            assert self.schema is SourceDraft
+            assert 'quote' not in SourceClaim.model_fields
+            assert payload['passages'][0]['text'] == source
+            return SourceDraft(sufficient=True, claims=[SourceClaim(
+                text='The degree is B.Sc. in Physics.' if audit_supported else 'The degree is a Ph.D. in Biology.',
+                evidence_id='E1')])
+
+    monkeypatch.setattr('papertrail.graph.ChatOpenAI', FakeModel)
+    result = ask(index, Settings(mode='live', api_key='fake'), 'What degree is listed for Example University?', ['education'])
+    assert calls == [SourceDraft, Audit]
+    assert result['status'] == ('answered' if audit_supported else 'unverified')
+    assert 'UNVALIDATED AUDIT TEXT' not in str(result)
+    if audit_supported:
+        assert result['claims'][0]['quote'] == source
+    else:
+        assert not result['claims']
+        assert result['reason'] == 'audit_rejected'
+
+
+@pytest.mark.parametrize('draft, reason, status', [
+    (SourceDraft(sufficient=False, claims=[]), 'model_insufficient', 'insufficient'),
+    (SourceDraft(sufficient=True, claims=[]), 'empty_answer', 'unverified'),
+    (SourceDraft(sufficient=True, claims=[SourceClaim(text='Unverified claim.', evidence_id='E99')]), 'unknown_citation', 'unverified'),
+    (SourceDraft(sufficient=True, claims=[SourceClaim(text='   ', evidence_id='E1')]), 'empty_answer', 'unverified'),
+])
+def test_live_rejections_explain_failure_without_exposing_draft(index, monkeypatch, draft, reason, status):
+    class FakeModel:
+        def __init__(self, **kwargs): pass
+        def with_structured_output(self, schema, **kwargs):
+            assert schema is SourceDraft  # Invalid drafts must not reach the audit.
+            return self
+        def invoke(self, messages): return draft
+    monkeypatch.setattr('papertrail.graph.ChatOpenAI', FakeModel)
+    result = ask(index, Settings(mode='live', api_key='fake'), 'Alpha sparse retrieval', ['alpha'])
+    assert result['status'] == status and result['reason'] == reason
+    assert result['evidence'] and not result['claims']
+    assert 'Unverified claim.' not in str(result)
+
+
+def test_live_comparison_requires_citations_for_every_selected_document(index, monkeypatch):
+    class FakeModel:
+        def __init__(self, **kwargs): pass
+        def with_structured_output(self, schema, **kwargs):
+            assert schema is SourceDraft
+            return self
+        def invoke(self, messages):
+            return SourceDraft(sufficient=True, claims=[SourceClaim(text='Alpha uses sparse retrieval.', evidence_id='E1')])
+    monkeypatch.setattr('papertrail.graph.ChatOpenAI', FakeModel)
+    result = ask(index, Settings(mode='live', api_key='fake'), 'Compare method retrieval', ['alpha', 'beta'], True)
+    assert result['status'] == 'unverified' and result['reason'] == 'incomplete_coverage'
+    assert not result['claims']
 
 
 def test_provider_failure_returns_no_fabricated_answer(index, monkeypatch):
@@ -132,6 +214,7 @@ def test_api_upload_ask_pdf_and_clear(monkeypatch):
     response = client.post('/api/collections', files=[('files', ('fixture.pdf', raw, 'application/pdf'))])
     assert response.status_code == 200, response.text
     data = response.json(); cid = data['id']; pid = data['papers'][0]['paper_id']
+    assert data['questions'] and all(q['paper_id'] == pid for q in data['questions'])
     answer = client.post(f'/api/collections/{cid}/ask', json={'question': 'What method uses sparse retrieval?'}).json()
     assert answer['status'] == 'excerpts'
     assert client.get(f'/api/collections/{cid}/papers/{pid}').content == raw
