@@ -5,7 +5,7 @@
 - The default CMS Medicare Advantage sample uses verified government PDF sections for inpatient and outpatient medical services. The current corpus contains 13 selected spans on 11 physical pages and 20 chunks; original PDF bytes and original citation pages are preserved.
 - The expanded automated suite passes 38 tests. The separate CMS source report passes 18/18 checks against downloaded originals, including source hashes, fixture equality, page/phrase retrieval anchors, scope refusals, and applicability dates. API tests verify default selection, collection isolation, PDF serving, and absent matrix evidence. CI downloads the pinned originals explicitly.
 - Browser verification exercised the default CMS CTA, an inpatient/outpatient protection question, a page-119 citation, a universal-checklist refusal, research-sample switching with cleared question/answer/evidence, the research reading matrix, and its separately labeled evaluation. The CMS landing page and workspace were also inspected at 390-pixel width with no horizontal overflow. Screenshots are excluded from publication.
-- A bounded OpenAI smoke check verified expected provider URLs, local key presence, model names, and live/memory process settings. The first embedding request returned a HTTP 429 quota error. One user-requested minimal diagnostic retry confirmed error type insufficient_quota. No generation or audit followed. Successful live output is not claimed. The preview remains demo/memory, and Pinecone is inactive.
+- Live results and the faithfulness goal remain unverified. The preview remains demo/memory, and Pinecone is inactive.
 
 The following original-build record is retained for historical context. Its research metrics and screenshots do not establish healthcare quality.
 

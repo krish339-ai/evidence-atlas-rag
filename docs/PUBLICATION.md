@@ -1,6 +1,6 @@
 # Public source distribution
 
-The CMS sample update adds government-source manifests, page-preserving section selection, default/secondary sample controls, healthcare source fixtures and evaluation, and scope documentation. The publication allowlist now contains 52 text files. The current local suite passes 38 tests; the CMS actual-source report passes 18/18 checks. Original research metrics remain separately labeled. CI also downloads and verifies the pinned government PDFs. The bounded OpenAI check stopped at a HTTP 429 quota response; live answers and Pinecone access remain unverified.
+The CMS sample update adds government-source manifests, page-preserving section selection, default/secondary sample controls, healthcare source fixtures and evaluation, and scope documentation. The publication allowlist now contains 52 text files. The current local suite passes 38 tests; the CMS actual-source report passes 18/18 checks. Original research metrics remain separately labeled. CI also downloads and verifies the pinned government PDFs. Live results, the faithfulness goal, and Pinecone access remain unverified.
 
 Repository: https://github.com/krish339-ai/evidence-atlas-rag
 

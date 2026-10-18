@@ -57,8 +57,8 @@ The [CMS report](../evaluation/HEALTHCARE_REPORT.md) records 18/18 checks: ten a
 
 These are small authored development checks, not a held-out benchmark, legal review, clinical validation, or a measurement of live answer faithfulness. The [original research report](../evaluation/REPORT.md) remains separately scoped to RAG/Self-RAG/CRAG. Its 75%/80% retrieval figures do not describe this CMS sample.
 
-## OpenAI configuration readiness
+## Live mode configuration
 
 The supported local defaults are `EVIDENCE_ATLAS_MODE=live`, `MODEL_BASE_URL=https://api.openai.com/v1`, `CHAT_MODEL=gpt-4.1-mini`, `EMBEDDING_MODEL=text-embedding-3-small`, and `VECTOR_BACKEND=memory`. Enter `MODEL_API_KEY` locally in the ignored `.env`. Blank `EMBEDDING_API_KEY` and `EMBEDDING_BASE_URL` fall back to the chat key and URL. `EVIDENCE_ATLAS_MODE` takes priority over the legacy `PAPERTRAIL_MODE` fallback. Preserve existing `.env` contents when editing.
 
-A bounded OpenAI smoke check on October 18, 2026 confirmed expected provider URLs, key presence, model names, and live/memory process configuration. The first embedding request returned a HTTP 429 quota error. One user-requested minimal diagnostic retry confirmed error type insufficient_quota; no generation or audit calls were attempted, so live embeddings, generation, audit, and cited answers remain unverified. The runnable preview uses demo/memory; Pinecone is inactive. A model request failure is not an insufficient-evidence result.
+Live results, the 95% faithfulness goal, and the 15-second live response target remain unverified. Local retrieval checks are not measurements of generated-answer quality. Pinecone remains optional and inactive. The runnable preview uses demo/memory. A model request failure is not an insufficient-evidence result.

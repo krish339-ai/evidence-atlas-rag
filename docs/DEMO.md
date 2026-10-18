@@ -9,7 +9,7 @@ The default walkthrough uses **CMS Medicare Advantage prior authorization**, cov
 5. Open Evaluation. Explain the separate CMS actual-source checks and their limits; they are not clinical validation or live-model quality measurements.
 6. Switch to the research sample. Show changed starter questions and matrix categories and the cleared citation panel. The research-only walkthrough below remains available.
 
-See [source provenance and more test questions](HEALTHCARE_SAMPLE.md). OpenAI live verification stopped at a HTTP 429 quota error on the first embedding call; run this walkthrough in demo/memory until that is resolved. Pinecone remains optional and inactive.
+See [source provenance and more test questions](HEALTHCARE_SAMPLE.md). Use demo/memory for the verified walkthrough. Live results and the faithfulness goal remain unverified. Pinecone remains optional and inactive.
 
 ## Original research-sample walkthrough
 

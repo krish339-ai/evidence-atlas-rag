@@ -12,11 +12,48 @@ The CMS scope guard returns insufficient evidence for common unsupported request
 
 **Verification:** 38 automated tests pass. The separate [CMS report](../evaluation/HEALTHCARE_REPORT.md) records 18/18 source checks, including ten answerable questions, seven refusal cases, and verification that committed excerpts match all three hash-pinned original PDFs. Tests include collection isolation and original PDF serving. CI downloads the CMS PDFs and repeats the integrity checks. This is a small development set, not clinical/legal validation or live model measurement.
 
-**Live status:** a bounded OpenAI check confirmed expected URLs, a locally present key, `gpt-4.1-mini`, `text-embedding-3-small`, and live/memory process settings. Its first embedding request returned a HTTP 429 quota error, so no generation or audit requests followed. Live outputs and the 95% faithfulness / 15-second targets remain unverified. Demo/memory is the verified operating mode; Pinecone remains inactive.
+**Live status:** Live results, the 95% faithfulness goal, and the 15-second live response target remain unverified. Local retrieval checks are not measurements of generated-answer quality. Pinecone remains optional and inactive. Demo/memory is the verified operating mode.
 
 The research design and numeric evaluation below are retained as **research-sample history only**. They do not measure the healthcare sample.
 
 Evidence Atlas RAG is a local research-paper reading and comparison app. Its source repository is [Evidence Atlas RAG](https://github.com/krish339-ai/evidence-atlas-rag). This document records the problem, datasets, implemented design, prompting decisions, actual iterations, and observations. The [project brief](project-brief.html) provides a compact planning reference; the [README](../README.md) provides setup instructions.
+
+## Local demo versus live AI: how to explain the app
+
+Evidence Atlas has two ways to use the same documents. Local demo mode searches for passages and displays them. Live AI mode adds semantic search and an LLM that writes an answer from the retrieved evidence. Search finds existing text; synthesis produces new wording that must be checked against that text.
+
+| Step | Local demo — active | Live AI — requires configuration |
+|---|---|---|
+| Prepare the PDFs | Extract text locally, split it into chunks, and retain document IDs and original PDF page numbers. | The same local extraction, chunking, and page metadata. |
+| Find evidence | Deterministic hashed word vectors represent word overlap. BM25 ranks keyword matches; reciprocal rank fusion (RRF) combines the two rankings. | A configured provider creates semantic embeddings for passages and questions. BM25 and RRF still contribute to retrieval. |
+| What the reader sees | Verbatim source excerpts with page citations. No LLM writes or summarizes the answer. | LLM-written claims grounded in retrieved passages, with supporting quotes and citations, when the checks pass. |
+| Check the evidence | A lexical coverage check can expand retrieval once or return insufficient evidence. Shared words do not prove answerability. | The same retrieval gate, followed by citation-ID and quote checks, selected-document coverage for comparisons, and a second model evidence audit. |
+| Where work runs | LangChain and LangGraph run locally. No model-provider calls; downloading a sample is a separate network operation. | LangChain and LangGraph still run locally. Passage and query text goes to the embedding provider; questions and retrieved evidence go to the chat provider. |
+| Storage | An in-memory index in the local server. Collections must be reloaded after a restart. | In-memory storage also works for live mode. Pinecone is an optional, separately configured remote backend. |
+
+### From a PDF to a response
+
+1. **Shared preparation:** PDFs → local page extraction → chunks with document/page metadata → build the selected mode’s index.
+2. **Local demo:** Question → hashed-word search + BM25 → RRF → coverage check (at most one expansion) → source excerpts and citations, or insufficient evidence.
+3. **Live AI:** Question → provider semantic embedding + BM25 → RRF → coverage check → LLM draft → citation/quote/coverage checks → model evidence audit → cited answer or insufficient evidence. Provider failures return an error, not an invented answer.
+
+PDF uploads, document selection, original-source browsing, and page citations remain available in both modes. The reading matrix is a table of retrieved excerpts in both modes; it does not become an LLM-written comparison. The CMS sample’s program, service-setting, and date boundaries also apply in both modes.
+
+### What citations and checks establish
+
+A citation establishes where a passage came from. It does not automatically establish that the passage is relevant, that its contents are factually correct, or that it supports the whole answer. Exact quote checks verify text matches; the model audit attempts to check support but can also be wrong. These checks do not guarantee faithfulness. Readers should inspect the original source, its scope, and its dates.
+
+### Switching modes
+
+Entering an API key alone does not turn the running demo into live AI. Live mode requires valid provider access, compatible embedding/chat models, and EVIDENCE_ATLAS_MODE=live in the effective startup configuration. Keep VECTOR_BACKEND=memory unless remote storage is intentionally required. Restart the server, then reload the sample or upload the PDFs again to rebuild the collection with semantic embeddings. A process-level demo setting can override a file setting; verify the visible mode badge. The current server stays in demo/memory mode.
+
+Live results, the 95% faithfulness goal, and the 15-second live response target remain unverified. Local retrieval checks are not measurements of generated-answer quality. Pinecone remains optional and inactive.
+
+### A short presentation explanation
+
+> “The local demo shows how the app finds evidence and lets us inspect the source. Live mode adds semantic retrieval and an AI-written answer based on that evidence. Both preserve page citations, but we still verify whether the source supports the answer.”
+
+Implementation references: [PDF preparation](../papertrail/ingest.py), [retrieval and storage](../papertrail/retrieval.py), [workflow and answer checks](../papertrail/graph.py), and [mode configuration](../papertrail/config.py).
 
 ## Project overview
 

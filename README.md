@@ -6,7 +6,7 @@ A local PDF evidence workspace built with LangChain and LangGraph. The default s
 
 **Original research-sample scope:** My RAG app helps AI learners answer research questions from the RAG, Self-RAG, and CRAG papers in a web app, targeting 95% faithfulness and responses within 15 seconds.
 
-Those are targets, not verified achievements. This first version works without credentials in **local excerpt mode**. Live semantic embeddings and generated answers need model configuration. A bounded OpenAI check reached a HTTP 429 quota error on its first embedding request; live answers remain unverified.
+Those are targets, not verified achievements. This first version works without credentials in **local excerpt mode**. Live semantic embeddings and generated answers need model configuration. Live results and the faithfulness goal remain unverified.
 
 ## Run the existing workspace
 
@@ -58,7 +58,7 @@ Pinecone retains vectors and passage text; PDFs, BM25 input, and the collection 
 
 The CMS sample indexes selected coverage, prior-authorization process, concurrent-review, and notice provisions. It preserves physical PDF pages and distinguishes 2024 coverage guidance, 2026 process/protection changes, and the cited 2027 API requirement. It is an educational administrative demo, with no patient records, individual approval decisions, or universal payer checklist.
 
-See [healthcare source provenance, boundaries, test questions, and OpenAI readiness](docs/HEALTHCARE_SAMPLE.md). The [CMS manifest](data/cms-sources.json) pins official URLs, hashes, dates, and exact indexed sections. The current selection covers 11 distinct pages and 20 chunks within three complete original PDFs. Hash changes stop indexing for review.
+See [healthcare source provenance, boundaries, test questions, and mode configuration](docs/HEALTHCARE_SAMPLE.md). The [CMS manifest](data/cms-sources.json) pins official URLs, hashes, dates, and exact indexed sections. The current selection covers 11 distinct pages and 20 chunks within three complete original PDFs. Hash changes stop indexing for review.
 
 Use the workspace selector to load CMS guidance or the original research sample. Switching creates a separate collection and clears the previous question, answer, matrix, and citations. `POST /api/demo` defaults to `cms-ma`; `POST /api/demo?sample_id=rag` loads the research papers. `scripts/download_papers.py` downloads both; `--sample cms-ma` or `--sample rag` downloads one.
 
