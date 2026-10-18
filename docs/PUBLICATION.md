@@ -8,4 +8,6 @@ PaperTrail is the app name. Evidence Atlas RAG is the repository name. The repos
 
 Private documents, downloaded and uploaded PDFs, credentials, session state, screenshots, logs, caches, virtual environments, and local review output are excluded. Public data includes source links, version metadata, PDF hashes, authored evaluation questions, and measured results. Paper citations and dependency metadata are retained.
 
-The repository was created with a generated README before application publication. Application source is prepared for its first publication; the verified commit will be recorded after the remote branch is updated.
+The repository was created with a generated README before application publication. The first application commit is [`325f9eb8c3beb04885d713e7ff2f1f976a9d47c1`](https://github.com/krish339-ai/evidence-atlas-rag/commit/325f9eb8c3beb04885d713e7ff2f1f976a9d47c1). Its 42 remote file paths and Git blob hashes were verified against the reviewed local index. The original README-only commit is retained; no remote history rewrite was needed.
+
+The recorded local suite passed 29 tests. GitHub Actions runs the offline tests and publication checker on pushes and pull requests; consult the repository's Actions tab for the status of a particular commit. Live model and Pinecone validation remain separate, uncompleted checks.
