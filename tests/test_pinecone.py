@@ -8,6 +8,21 @@ from papertrail.config import Settings
 from papertrail.pinecone_backend import build_pinecone_store, validate_description
 
 
+def test_legacy_mode_and_current_precedence(monkeypatch):
+    monkeypatch.delenv('EVIDENCE_ATLAS_MODE', raising=False)
+    monkeypatch.setenv('PAPERTRAIL_MODE', 'live')
+    assert Settings().mode == 'live'
+    monkeypatch.setenv('EVIDENCE_ATLAS_MODE', 'demo')
+    assert Settings().mode == 'demo'
+
+
+@pytest.mark.parametrize('prefix', ['papertrail', 'papertrail-existing'])
+def test_legacy_namespace_configuration_remains_valid(prefix):
+    settings = config(namespace_prefix=prefix)
+    settings.validate()
+    assert settings.namespace_prefix == prefix
+
+
 def config(**kwargs):
     base = Settings(mode='live', api_key='test-model-key', vector_backend='pinecone',
                     pinecone_api_key='test-pinecone-key', pinecone_index='test-existing', embedding_dimensions=3)
@@ -43,7 +58,7 @@ def test_isolated_namespaces_and_existing_index_only():
 
     class Embedding:
         def embed_query(self, text):
-            assert text == 'PaperTrail embedding dimension compatibility check'
+            assert text == 'Evidence Atlas RAG embedding dimension compatibility check'
             return [1, 0, 0]
 
     class Remote:
@@ -65,7 +80,7 @@ def test_isolated_namespaces_and_existing_index_only():
     docs = [Document(page_content='Authored fixture', metadata={'chunk_id': 'fixture:1:0'})]
     first, one = build_pinecone_store(docs, Embedding(), config(), Client, Store)
     second, two = build_pinecone_store(docs, Embedding(), config(), Client, Store)
-    assert one != two and one.startswith('papertrail-') and two.startswith('papertrail-')
+    assert one != two and one.startswith('evidence-atlas-') and two.startswith('evidence-atlas-')
     assert all(ids == ['fixture:1:0'] for namespace, ids in calls)
     assert len(calls) == 2
 
@@ -90,7 +105,7 @@ def test_partial_write_error_is_redacted_and_no_remote_delete():
     with pytest.raises(ValueError) as caught:
         build_pinecone_store([], Embedding(), config(), Client, Store)
     assert 'private-key-must-not-leak' not in str(caught.value)
-    assert 'papertrail-' in str(caught.value) and 'no remote cleanup' in str(caught.value)
+    assert 'evidence-atlas-' in str(caught.value) and 'no remote cleanup' in str(caught.value)
 
 
 def test_credentials_are_omitted_from_configuration_repr():

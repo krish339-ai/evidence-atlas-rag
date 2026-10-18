@@ -234,7 +234,7 @@ async function loadEvaluation() {
 function exportTrail() {
   if (!currentAnswer) return;
   const a = currentAnswer;
-  let text = `# PaperTrail research trail\n\nQuestion: ${a.question}\n\nMode: ${a.mode} | Status: ${a.status}\n\n${a.message}\n\n`;
+  let text = `# Evidence Atlas RAG research trail\n\nQuestion: ${a.question}\n\nMode: ${a.mode} | Status: ${a.status}\n\n${a.message}\n\n`;
   a.claims.forEach(claim => {
     const e = a.evidence.find(item => item.id === claim.evidence_id);
     text += `## ${claim.kind}\n\n${claim.text}\n\nSource: ${e.title}, PDF page ${e.page} (${e.filename}).\n\n`;
@@ -243,7 +243,7 @@ function exportTrail() {
   });
   text += '\nCompare experimental conditions before interpreting differences.\n';
   const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
-  const link = node('a'); link.href = url; link.download = 'papertrail-research-trail.md'; link.click();
+  const link = node('a'); link.href = url; link.download = 'evidence-atlas-rag-research-trail.md'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
@@ -280,4 +280,4 @@ api('/api/status').then(result => {
   $('#privacy-note').textContent = status.mode === 'live' ? 'Live mode: paper text is sent to your configured embedding provider. Questions and retrieved passages are sent to your model provider. Collections are not saved to disk.' : 'Local mode: no model calls and no paper text leaves this server. Answers are verbatim excerpts, using lexical retrieval. Enable live mode for semantic search and synthesis.';
   if (status.vector_backend === 'pinecone') $('#privacy-note').append(node('p', '', 'Pinecone stores vectors and passage text remotely in an isolated namespace. PDFs and session state remain local; remote vectors alone do not restore a collection after restart.'));
   if (!status.configured) toast(status.configuration_message || 'Check your local .env configuration.');
-}).catch(() => { $('#mode-badge').textContent = 'SERVER UNAVAILABLE'; toast('Cannot reach PaperTrail. Start the Python server and reload.'); });
+}).catch(() => { $('#mode-badge').textContent = 'SERVER UNAVAILABLE'; toast('Cannot reach Evidence Atlas RAG. Start the Python server and reload.'); });

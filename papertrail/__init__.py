@@ -1,1 +1,1 @@
-"""PaperTrail: evidence-first research reading."""
+"""Evidence Atlas RAG: evidence-first research reading."""

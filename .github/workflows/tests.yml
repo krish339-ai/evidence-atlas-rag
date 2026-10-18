@@ -6,7 +6,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      PAPERTRAIL_MODE: demo
+      EVIDENCE_ATLAS_MODE: demo
       VECTOR_BACKEND: memory
       LANGSMITH_TRACING: 'false'
     steps:

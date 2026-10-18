@@ -1,4 +1,4 @@
-# PaperTrail live demo outline
+# Evidence Atlas RAG live demo outline
 
 Aim for 4 minutes 30 seconds, leaving 30 seconds of margin. This is a recording plan; no video has been recorded.
 

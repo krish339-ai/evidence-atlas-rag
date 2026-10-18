@@ -11,9 +11,9 @@ def validate_description(description, expected_dimension):
     if _field(description, 'dimension') != expected_dimension:
         raise ValueError('Pinecone index dimension does not match EMBEDDING_DIMENSIONS. Choose a compatible existing dense index; this app will not reconfigure it.')
     if _field(description, 'metric') != 'cosine':
-        raise ValueError('PaperTrail requires a cosine Pinecone index. This app will not change the existing index metric.')
+        raise ValueError('Evidence Atlas RAG requires a cosine Pinecone index. This app will not change the existing index metric.')
     if _field(description, 'vector_type', 'dense') != 'dense':
-        raise ValueError('PaperTrail requires a dense vector index, not a sparse or integrated-embedding index.')
+        raise ValueError('Evidence Atlas RAG requires a dense vector index, not a sparse or integrated-embedding index.')
     if _field(description, 'embed'):
         raise ValueError('Use an index for externally generated dense vectors, not a Pinecone integrated-embedding index.')
     if not _field(_field(description, 'status', {}), 'ready', False):
@@ -32,7 +32,7 @@ def build_pinecone_store(chunks, embedding, config, client_factory=None, store_f
         store_factory = store_factory or PineconeVectorStore
     # Probe only a fixed non-document string before sending the corpus anywhere.
     try:
-        dimension = len(embedding.embed_query('PaperTrail embedding dimension compatibility check'))
+        dimension = len(embedding.embed_query('Evidence Atlas RAG embedding dimension compatibility check'))
     except Exception as exc:
         raise ValueError('Embedding compatibility probe failed. Check the embedding credentials, model name, and endpoint in .env.') from exc
     if dimension != config.embedding_dimensions:

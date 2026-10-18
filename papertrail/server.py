@@ -16,7 +16,7 @@ from papertrail.ingest import MAX_BYTES, ResearchPDFLoader, chunk_pages
 from papertrail.retrieval import Index, tokens
 
 ROOT = Path(__file__).resolve().parent.parent
-app = FastAPI(title='PaperTrail', version='0.1.0')
+app = FastAPI(title='Evidence Atlas RAG', version='0.1.0')
 collections = {}
 collection_lock = threading.Lock()
 SOURCES = json.loads((ROOT / 'data/sources.json').read_text(encoding='utf-8'))

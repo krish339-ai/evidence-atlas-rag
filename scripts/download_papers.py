@@ -14,7 +14,7 @@ def main():
     for paper in manifest:
         path = target / paper['file']
         if not path.exists():
-            request = Request(paper['pdf'], headers={'User-Agent': 'PaperTrail educational local demo'})
+            request = Request(paper['pdf'], headers={'User-Agent': 'Evidence Atlas RAG educational local demo'})
             with urlopen(request, timeout=45) as response:
                 data = response.read(20 * 1024 * 1024 + 1)
             if not data.startswith(b'%PDF-') or len(data) > 20 * 1024 * 1024:

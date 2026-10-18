@@ -28,3 +28,7 @@ Local screenshots are stored in `docs/screenshots/` and excluded from Git public
 ## Remaining checks
 
 Configure the chosen model locally with the in-memory backend, then verify actual authentication, embedding dimensions, retrieval, structured answers, and provider latency. If optional Pinecone storage is enabled later, verify its existing index and ingestion/read visibility separately. Human-review live claims and collect a held-out evaluation. No live service success, 95% faithfulness achievement, or 15-second live target achievement is claimed.
+
+## Product name update
+
+The renamed build passed 32 offline tests, including precedence of the current mode variable over its legacy alias and acceptance of existing namespace prefixes. Dotenv file loading is disabled in the test suite. JavaScript syntax passed; the renamed interface was visually checked at desktop and 390-pixel width, with no horizontal document overflow observed. Existing backend processes and in-memory collections were left running. Compatibility identifiers are documented in COMPATIBILITY.md.

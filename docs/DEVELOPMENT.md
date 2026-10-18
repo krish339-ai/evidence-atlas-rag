@@ -1,10 +1,10 @@
-# PaperTrail development notes
+# Evidence Atlas RAG development notes
 
 Design rationale, implementation history, and remaining validation work.
 
 ## Overview
 
-PaperTrail helps AI learners compare research papers through questions, source excerpts, page citations, and a reading matrix. It uses LangChain and LangGraph with a custom web interface.
+Evidence Atlas RAG helps AI learners compare research papers through questions, source excerpts, page citations, and a reading matrix. It uses LangChain and LangGraph with a custom web interface.
 
 Use the exact primer and six-field framework from `project-brief.html`. The 95% faithfulness and 15-second response figures are proposed targets, not verified results.
 

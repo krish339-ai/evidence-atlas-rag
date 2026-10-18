@@ -1,4 +1,4 @@
-# PaperTrail evaluation report
+# Evidence Atlas RAG evaluation report
 
 Local lexical retrieval evaluation on 14 authored questions over three real, version-pinned arXiv PDFs. Gold evidence is checked against actual page text. Both strategies use the same corpus, splitter, query scope, and top-k=6.
 

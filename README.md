@@ -1,4 +1,6 @@
-# PaperTrail
+# Evidence Atlas RAG
+
+The product and repository share the Evidence Atlas RAG name. The internal Python package retains its existing import path; see [compatibility notes](docs/COMPATIBILITY.md) for the supported legacy configuration identifiers.
 
 A local research-paper comparison workspace built with LangChain and LangGraph. It includes a responsive editorial landing page, PDF uploads, cited research questions, a source-excerpt reading matrix, inspectable PDF evidence, research-trail export, and a reproducible evaluation.
 
@@ -38,7 +40,7 @@ On macOS/Linux use `python3 -m venv .venv` and `.venv/bin/python` instead. The l
 | `demo` (default) | Deterministic hashed word vectors + BM25 + rank fusion | Verbatim source excerpts, explicitly labeled | No model calls; sample download is a separate explicit step |
 | `live` | Configured semantic embeddings + BM25 + rank fusion | Structured cited claims, quote checks, model evidence audit | Paper text to embedding provider; questions and retrieved text to model provider |
 
-Copy `.env.example` to `.env`, set `PAPERTRAIL_MODE=live`, and supply `MODEL_API_KEY`. The initial defaults are `gpt-4.1-mini` and `text-embedding-3-small`. These are configuration defaults, not a promise that a particular account has access. Set separate embedding credentials/base URL if needed. Restart after changes.
+Copy `.env.example` to `.env`, set `EVIDENCE_ATLAS_MODE=live`, and supply `MODEL_API_KEY`. The initial defaults are `gpt-4.1-mini` and `text-embedding-3-small`. These are configuration defaults, not a promise that a particular account has access. Set separate embedding credentials/base URL if needed. Restart after changes.
 
 An OpenAI-compatible provider, including a suitably configured Nebius account, needs compatible chat, embedding, and JSON-schema structured-output endpoints. No Nebius model IDs, credits, account access, or compatibility have been verified. Failed requests display a configuration error and never fabricate a successful answer. Never put keys in frontend code or commit `.env`.
 
@@ -48,7 +50,7 @@ The app is intended for a **single user on loopback**. Collections and PDF bytes
 
 In-memory vectors are the active local backend. Pinecone is optional; live generation can also use in-memory vectors. See [the credential and index checklist](docs/PINECONE.md). Copy `.env.example` to `.env` and enter credentials locally, never in chat or frontend code.
 
-Set `PAPERTRAIL_MODE=live`, `VECTOR_BACKEND=pinecone`, `MODEL_API_KEY`, `PINECONE_API_KEY`, and `PINECONE_INDEX_NAME`. Confirm model names/base URLs and `EMBEDDING_DIMENSIONS` (1536 for the initial default). The adapter requires an existing, ready, externally embedded dense cosine index; it validates dimensions and metric before writing. It never creates/reconfigures an index and always allocates a fresh `papertrail-...` namespace per collection.
+Set `EVIDENCE_ATLAS_MODE=live`, `VECTOR_BACKEND=pinecone`, `MODEL_API_KEY`, `PINECONE_API_KEY`, and `PINECONE_INDEX_NAME`. Confirm model names/base URLs and `EMBEDDING_DIMENSIONS` (1536 for the initial default). The adapter requires an existing, ready, externally embedded dense cosine index; it validates dimensions and metric before writing. It never creates/reconfigures an index and always allocates a fresh `evidence-atlas-...` namespace per collection.
 
 Pinecone retains vectors and passage text; PDFs, BM25 input, and the collection catalog remain process-local. **Clear collection clears local state only and does not delete remote vectors.** Reindexing creates a new namespace. Live Pinecone access is not verified; all adapter test results use mocks. No LangSmith account or remote tracing has been configured.
 
@@ -93,7 +95,7 @@ The displayed workflow trace is local application data. LangSmith remote tracing
 .\.venv\Scripts\python.exe -m scripts.evaluate
 ```
 
-The latest run passed **29 tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, and the optional Pinecone adapter using mocks. Mocked live tests are not real provider validation.
+The latest run passed **32 tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, and the optional Pinecone adapter using mocks. Mocked live tests are not real provider validation.
 
 The [evaluation report](evaluation/REPORT.md) and [raw results](evaluation/results.json) record 14 questions, including 10 evidence-annotated direct/cross-paper questions and 4 fallback/ambiguous/adversarial cases:
 

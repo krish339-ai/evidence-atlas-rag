@@ -1,6 +1,6 @@
-# PaperTrail project documentation
+# Evidence Atlas RAG project documentation
 
-PaperTrail is a local research-paper reading and comparison app. Its source repository is [Evidence Atlas RAG](https://github.com/krish339-ai/evidence-atlas-rag). This document records the problem, datasets, implemented design, prompting decisions, actual iterations, and observations. The [project brief](project-brief.html) provides a compact planning reference; the [README](../README.md) provides setup instructions.
+Evidence Atlas RAG is a local research-paper reading and comparison app. Its source repository is [Evidence Atlas RAG](https://github.com/krish339-ai/evidence-atlas-rag). This document records the problem, datasets, implemented design, prompting decisions, actual iterations, and observations. The [project brief](project-brief.html) provides a compact planning reference; the [README](../README.md) provides setup instructions.
 
 ## Project overview
 
@@ -8,7 +8,7 @@ PaperTrail is a local research-paper reading and comparison app. Its source repo
 
 Both figures are targets. Live faithfulness and live response latency have not been measured. The current verified experience retrieves labeled, verbatim excerpts without model credentials. A configured live mode can generate structured, cited claims, but its real-provider behavior remains to be validated.
 
-The problem is traceability: readers comparing research methods need to inspect what each paper actually reports, identify missing evidence, and avoid ranking experiments with incompatible datasets or metrics. PaperTrail keeps paper and physical PDF page references alongside retrieved passages. Users can load the three-paper sample, upload their own text-based PDFs, select papers, ask questions, inspect evidence and original pages, build a four-dimension reading matrix, and export a research trail.
+The problem is traceability: readers comparing research methods need to inspect what each paper actually reports, identify missing evidence, and avoid ranking experiments with incompatible datasets or metrics. Evidence Atlas RAG keeps paper and physical PDF page references alongside retrieved passages. Users can load the three-paper sample, upload their own text-based PDFs, select papers, ask questions, inspect evidence and original pages, build a four-dimension reading matrix, and export a research trail.
 
 The reading matrix covers methods, datasets, findings, and limitations. It contains retrieved excerpts rather than a generated comparative verdict. Missing limitations evidence is explicit. In live answers, accepted claims carry either a `Reported finding` or `Interpretation` label, a source ID, and a supporting quote.
 
@@ -79,7 +79,7 @@ Codex assisted with implementation, dependency debugging, browser inspection, an
 
 ## Evaluation and observations
 
-The latest local automated run passed **29 tests**. Tests cover parsing, chunk metadata, invalid/scanned PDFs, retrieval filters and coverage, exact excerpts, bounded refusal, citation validation, mocked model outcomes, API upload/ask/PDF/delete behavior, matrix selection, and mocked Pinecone behavior. Tests explicitly force demo/memory configuration so local credentials cannot trigger provider calls.
+The latest local automated run passed **32 tests**. Tests cover parsing, chunk metadata, invalid/scanned PDFs, retrieval filters and coverage, exact excerpts, bounded refusal, citation validation, mocked model outcomes, API upload/ask/PDF/delete behavior, matrix selection, and mocked Pinecone behavior. Tests explicitly force demo/memory configuration so local credentials cannot trigger provider calls.
 
 The [evaluation report](../evaluation/REPORT.md), [questions](../evaluation/questions.json), and [raw results](../evaluation/results.json) record 14 authored questions over the real corpus. Ten answerable questions have page and phrase anchors, which the evaluation checks against extracted PDF text before scoring. Four additional cases cover ambiguous, unanswerable, and adversarial requests.
 
@@ -98,9 +98,11 @@ Browser checks and their scope are recorded in [VERIFICATION.md](VERIFICATION.md
 
 ## Reproducibility and local configuration
 
+The product name is Evidence Atlas RAG throughout. Existing Python import paths and legacy local configuration aliases are preserved as described in [COMPATIBILITY.md](COMPATIBILITY.md); they do not require a data migration.
+
 Use Python 3.12 to match the tested environment. Install `requirements-lock.txt`, run `scripts/download_papers.py`, then start `python -m uvicorn papertrail.server:app --host 127.0.0.1 --port 8000`. The README gives Windows and macOS/Linux virtual-environment commands. Run `python -m pytest -q` for tests and `python -m scripts.evaluate` to regenerate the local report. Timings may vary by machine and run.
 
-The default configuration is `PAPERTRAIL_MODE=demo` and `VECTOR_BACKEND=memory`. For live generation, copy `.env.example` to an ignored local `.env`, set `PAPERTRAIL_MODE=live`, enter `MODEL_API_KEY`, confirm chat/embedding model names and provider URLs, and restart. Keep the in-memory backend for this first live validation. Credentials must not be committed or placed in the frontend. No credential values are included in this document.
+The default configuration is `EVIDENCE_ATLAS_MODE=demo` and `VECTOR_BACKEND=memory`. For live generation, copy `.env.example` to an ignored local `.env`, set `EVIDENCE_ATLAS_MODE=live`, enter `MODEL_API_KEY`, confirm chat/embedding model names and provider URLs, and restart. Keep the in-memory backend for this first live validation. Credentials must not be committed or placed in the frontend. No credential values are included in this document.
 
 Live mode sends document text to the embedding provider and questions/retrieved text to the model provider. The configured provider must support the selected chat, embedding, and JSON-schema APIs. Defaults do not guarantee account access or compatibility. Provider failures surface as errors rather than fabricated success. Per-call timeouts are failure limits, not an enforced fifteen-second total deadline.
 

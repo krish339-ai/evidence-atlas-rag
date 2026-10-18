@@ -2,7 +2,7 @@
 
 Repository: https://github.com/krish339-ai/evidence-atlas-rag
 
-PaperTrail is the app name. Evidence Atlas RAG is the repository name. The repository contains source, tests, configuration placeholders, documentation, paper metadata, and measured evaluation artifacts. Source publication does not provide a hosted application.
+Evidence Atlas RAG is the product name; evidence-atlas-rag is the repository slug. The repository contains source, tests, configuration placeholders, documentation, paper metadata, and measured evaluation artifacts. Source publication does not provide a hosted application.
 
 `PUBLIC_FILES.txt` is the explicit publication allowlist. `scripts/check_publication.py` checks those paths for known credential patterns, private absolute paths, blank credential placeholders, and unexpected tracked files. It never reads the local `.env`.
 

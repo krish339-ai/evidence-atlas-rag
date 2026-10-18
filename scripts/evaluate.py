@@ -85,7 +85,7 @@ def main():
               'pages': len(pages), 'chunks': len(chunks), 'summary': summary, 'cases': cases}
     (ROOT / 'evaluation/results.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     delta = (summary['hybrid']['recall'] - summary['baseline']['recall']) * 100
-    lines = ['# PaperTrail evaluation report', '', report['description'], '', '## Measured results', '',
+    lines = ['# Evidence Atlas RAG evaluation report', '', report['description'], '', '## Measured results', '',
              f"- Corpus: {len(pages)} pages, {len(chunks)} chunks.",
              f"- Baseline mean evidence recall@6: {summary['baseline']['recall']:.1%}.",
              f"- Hybrid mean evidence recall@6: {summary['hybrid']['recall']:.1%} ({delta:+.1f} percentage points).",
