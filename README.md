@@ -8,15 +8,38 @@ A local PDF evidence workspace built with LangChain and LangGraph. The default s
 
 Those are targets, not verified achievements. This first version works without credentials in **local excerpt mode**. Live semantic embeddings and generated answers need model configuration. Live results and the faithfulness goal remain unverified.
 
-## Run the existing workspace
+## Start, stop, and restart on Windows
 
-From this project directory in PowerShell:
+Complete **Fresh setup** below once. Then double-click a batch file in the project folder:
+
+| File | Action |
+|---|---|
+| `start.bat` | Starts the app in the background, checks that it is ready, and prints the local URL. Running it again does not create another server. |
+| `stop.bat` | Stops the server started by these batch files for this project. Running it when the server is already stopped is harmless. |
+| `restart.bat` | Stops the managed server and starts it again. Use this after application code changes. |
+
+Open <http://127.0.0.1:8000>. Click **Explore CMS guidance**, then ask a question or build a reading matrix. You can close the launcher window after it reports ready; the app keeps running until you use `stop.bat` or shut down Windows.
+
+The batch files use **demo/memory mode**, disable remote tracing, and skip loading `.env`. No model credentials or paid API calls are needed. They do not change your saved configuration. Stopping or restarting clears loaded documents, questions, and other in-memory collection state; reload your sample or PDFs afterward.
+
+You can also run them from PowerShell. Add `--no-pause` to skip the final keypress prompt:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn papertrail.server:app --host 127.0.0.1 --port 8000
+.\start.bat --no-pause
+.\stop.bat --no-pause
+.\restart.bat --no-pause
 ```
 
-Open <http://127.0.0.1:8000>. Click **Explore CMS guidance**, then ask a question or build a reading matrix. Stop with Ctrl+C. Complete the fresh setup below first to install dependencies and download both sample collections. `run.cmd` also starts the server from this folder.
+The files work from any current directory, including project paths containing spaces. They use the included `scripts/local-server.ps1` helper and Windows PowerShell; no administrator rights are needed. The execution-policy override applies only to that helper process, not your permanent system policy. Organization policies may still prevent scripts from running.
+
+**Troubleshooting:**
+
+- **Missing Python environment or dependencies:** complete Fresh setup below. The scripts do not install packages automatically.
+- **Port 8000 already in use:** if you launched the app manually or with `run.cmd`, stop it in its original terminal with Ctrl+C first. The batch files deliberately leave unmanaged servers and unrelated processes alone.
+- **Startup fails or times out:** inspect `tmp/local-server/stderr.log` and `tmp/local-server/stdout.log`. These logs are replaced on each start. The ignored `tmp/local-server/server.json` records process identities so stale process IDs cannot target another application; leave it in place while the server runs.
+- **App opens but samples do not load:** run the sample download command in Fresh setup. Downloads require an internet connection; asking demo-mode questions does not call a model provider.
+
+For a foreground server that uses your configured environment (including live mode), the existing `run.cmd` remains available. Stop a batch-managed instance first, run `run.cmd`, and use Ctrl+C in its terminal to stop it. See **Two honest operating modes** before enabling live mode.
 
 The self-contained [project brief](docs/project-brief.html) opens directly in a browser without starting the app. It records the primer, six-field framework, retrieval design notes, and implementation status.
 
@@ -28,10 +51,10 @@ Use Python 3.11+ (tested on Python 3.12, Windows). No Node build or database ser
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 .\.venv\Scripts\python.exe scripts/download_papers.py
-.\.venv\Scripts\python.exe -m uvicorn papertrail.server:app --host 127.0.0.1 --port 8000
+.\start.bat
 ```
 
-On macOS/Linux use `python3 -m venv .venv` and `.venv/bin/python` instead. The lock file records the tested environment; `requirements.txt` and `requirements-dev.txt` specify compatible ranges. If `py` is unavailable, substitute the full path to your Python executable.
+On macOS/Linux use `python3 -m venv .venv` and `.venv/bin/python` instead, and start with `.venv/bin/python -m uvicorn papertrail.server:app --host 127.0.0.1 --port 8000` (Ctrl+C stops it). The batch files are Windows-only. The lock file records the tested environment; `requirements.txt` and `requirements-dev.txt` specify compatible ranges. If `py` is unavailable, substitute the full path to your Python executable.
 
 ## Two honest operating modes
 

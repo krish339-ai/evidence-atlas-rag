@@ -8,6 +8,10 @@ requirements-dev.txt
 requirements-pinecone.txt
 requirements-lock.txt
 run.cmd
+start.bat
+stop.bat
+restart.bat
+scripts/local-server.ps1
 papertrail/__init__.py
 papertrail/config.py
 papertrail/ingest.py
