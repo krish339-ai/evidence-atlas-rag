@@ -14,6 +14,7 @@ from papertrail.comparison import DIMENSIONS, matrix_passage
 from papertrail.graph import ask
 from papertrail.ingest import MAX_BYTES, ResearchPDFLoader, chunk_pages
 from papertrail.retrieval import Index, tokens
+from papertrail.samples import DEFAULT_SAMPLE, catalog, sample_info, sources, select_sections, verify_source
 
 ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title='Evidence Atlas RAG', version='0.1.0')
@@ -33,42 +34,48 @@ def status():
         configuration_message = str(exc)
     return {'mode': settings.mode, 'configured': configured, 'configuration_message': configuration_message,
             'vector_backend': settings.vector_backend,
-            'demo_available': all((ROOT / 'data/papers' / s['file']).is_file() for s in SOURCES),
-            'sources': SOURCES}
+            'demo_available': catalog()[0]['available'], 'default_sample': DEFAULT_SAMPLE,
+            'samples': catalog(), 'sources': sources(DEFAULT_SAMPLE)}
 
 
-def create_collection(files, source_metadata=None):
+def create_collection(files, source_metadata=None, sample_id=None):
     settings.validate()
     pages, raw, papers = [], {}, []
     for filename, data in files:
+        extra = (source_metadata or {}).get(filename, {})
+        verify_source(data, extra)
         loaded = ResearchPDFLoader(data, filename).load()
         pid = loaded[0].metadata['paper_id']
         if pid in raw:
             continue
-        extra = (source_metadata or {}).get(filename, {})
+        loaded = select_sections(loaded, extra)
         for d in loaded:
-            d.metadata.update(extra)
+            d.metadata.update({k: v for k, v in extra.items() if k != 'sections'})
         raw[pid] = data
         pages.extend(loaded)
-        papers.append(dict(loaded[0].metadata, characters=sum(len(d.page_content) for d in loaded)))
+        papers.append(dict(loaded[0].metadata, indexed_pages=len({d.metadata['page'] for d in loaded}), characters=sum(len(d.page_content) for d in loaded)))
     chunks = chunk_pages(pages)
     index = Index(chunks, settings)
     cid = secrets.token_urlsafe(24)
     with collection_lock:
         if len(collections) >= 8:
             raise ValueError('The local server has 8 collections. Clear an existing collection or restart the server.')
-        collections[cid] = dict(index=index, papers=papers, raw=raw, pages=pages)
-    return {'id': cid, 'papers': papers, 'chunks': len(chunks), 'pages': len(pages), 'mode': settings.mode,
+        collections[cid] = dict(index=index, papers=papers, raw=raw, pages=pages, sample_id=sample_id)
+    return {'id': cid, 'papers': papers, 'chunks': len(chunks), 'pages': len({(d.metadata['paper_id'], d.metadata['page']) for d in pages}), 'mode': settings.mode,
+            'sample': sample_info(sample_id) if sample_id else None,
             'vector_backend': index.backend, 'namespace': index.namespace}
 
 
 @app.post('/api/demo')
-def demo():
-    if not all((ROOT / 'data/papers' / s['file']).is_file() for s in SOURCES):
-        raise HTTPException(409, 'Download the sample papers first: python scripts/download_papers.py')
+def demo(sample_id: str = DEFAULT_SAMPLE):
     try:
-        return create_collection([(s['file'], (ROOT / 'data/papers' / s['file']).read_bytes()) for s in SOURCES],
-                                 {s['file']: s for s in SOURCES})
+        selected_sources = sources(sample_id)
+        if not all((ROOT / 'data/papers' / s['file']).is_file() for s in selected_sources):
+            raise HTTPException(409, f'Download this sample first: python scripts/download_papers.py --sample {sample_id}')
+        return create_collection([(s['file'], (ROOT / 'data/papers' / s['file']).read_bytes()) for s in selected_sources],
+                                 {s['file']: s for s in selected_sources}, sample_id)
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
@@ -126,7 +133,7 @@ def question(cid: str, body: Question):
     if body.comparison and len(ids) < 2:
         raise HTTPException(400, 'Select at least two papers to compare.')
     try:
-        return ask(collection['index'], settings, body.question, ids, body.comparison)
+        return ask(collection['index'], settings, body.question, ids, body.comparison, collection.get('sample_id'))
     except Exception as exc:
         raise HTTPException(502, 'Retrieval failed. Check your embedding provider connection.') from exc
 
@@ -138,10 +145,12 @@ def compare(cid: str, body: Question):
     if len(ids) < 2:
         raise HTTPException(400, 'Select at least two papers to compare.')
     rows, evidence = [], []
-    for label in DIMENSIONS:
+    from papertrail.comparison import CMS_DIMENSIONS
+    dimensions = CMS_DIMENSIONS if collection.get('sample_id') == 'cms-ma' else DIMENSIONS
+    for label in dimensions:
         cells = []
         for pid in ids:
-            doc = matrix_passage(collection['index'], pid, label)
+            doc = matrix_passage(collection['index'], pid, label, dimensions)
             if doc is None:
                 cells.append({'paper_id': pid, 'evidence_id': None, 'text': 'No matching passage found.'})
                 continue
@@ -150,7 +159,7 @@ def compare(cid: str, body: Question):
             cells.append({'paper_id': pid, 'evidence_id': item['id'], 'text': doc.page_content})
         rows.append({'dimension': label, 'cells': cells})
     return {'rows': rows, 'evidence': evidence, 'paper_ids': ids,
-            'note': 'A reading matrix of retrieved excerpts, not generated conclusions. Different datasets, metrics, and experimental conditions may prevent direct comparison.'}
+            'note': sample_info(collection['sample_id'])['comparison_note'] if collection.get('sample_id') else 'A reading matrix of source excerpts, not generated conclusions.'}
 
 
 @app.get('/api/collections/{cid}/papers/{pid}')
@@ -169,8 +178,10 @@ def delete(cid: str):
 
 
 @app.get('/api/evaluation')
-def evaluation():
-    path = ROOT / 'evaluation/results.json'
+def evaluation(sample_id: str = 'rag'):
+    if sample_id not in {'cms-ma', 'rag'}:
+        raise HTTPException(400, 'Unknown evaluation sample.')
+    path = ROOT / 'evaluation' / ('healthcare-results.json' if sample_id == 'cms-ma' else 'results.json')
     if not path.exists():
         raise HTTPException(404, 'Run python -m scripts.evaluate to generate the evaluation report.')
     return json.loads(path.read_text(encoding='utf-8'))

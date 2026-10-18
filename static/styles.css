@@ -3,3 +3,17 @@
 
 .hero h1 em{margin-left:.06em}.desk{height:760px}.library,.research-main,.evidence-panel{overflow:auto}.tabs{position:sticky;top:0;background:var(--white);z-index:2}@media(max-width:1150px){.desk{height:auto}.research-main{max-height:760px}.evidence-panel{max-height:620px}}@media(max-width:760px){.research-main{max-height:none}.evidence-panel{max-height:650px}}
 .brand-icon{flex-shrink:0}.brand-name{line-height:1.15}@media(max-width:760px){.site-header{gap:12px}.site-header .wordmark{font-size:17px;letter-spacing:-.6px;gap:6px}.site-header .brand-name{max-width:128px}.site-header>.button{flex-shrink:0}.site-header .brand-dot{display:none}}
+
+/* Sample selection and provenance use the existing reading-room palette. */
+.sample-label{display:block;font-size:12px;margin:20px 0 8px}
+#sample-select{width:100%;min-width:0;max-width:100%;padding:10px;border:1px solid var(--line,#d6dbd0);background:#fff;color:#243d32;border-radius:4px;font:inherit;font-size:12px}
+#collection-context h3{font:normal 18px/1.35 Georgia,serif;margin:12px 0}
+#collection-context details{font-size:12px;line-height:1.6;margin-bottom:16px}
+#collection-context summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.sample-cards article{padding:24px 0;border-bottom:1px solid #6c8064}
+.sample-cards small{font-size:10px;letter-spacing:1.6px}
+.sample-cards h3{font:normal 28px/1.2 Georgia,serif;margin:14px 0}
+.sample-cards p{line-height:1.7}
+.sample-cards a{font-size:13px;padding:12px 0}
+.source-provenance{display:block;font-size:11px;line-height:1.5;margin:12px 0;color:#536450}
+.suggestions button{line-height:1.5}

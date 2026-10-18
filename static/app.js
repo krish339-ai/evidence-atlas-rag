@@ -33,13 +33,13 @@ async function task(message, action) {
   working = true;
   $('#busy-message').textContent = message;
   $('#busy').hidden = false;
-  $$('button').forEach(b => { b.disabled = true; });
+  $$('button, #sample-select').forEach(b => { b.disabled = true; });
   $('#file-input').disabled = true;
   try { await action(); } catch (error) { toast(error.message || 'Something went wrong. Please try again.'); }
   finally {
     working = false;
     $('#busy').hidden = true;
-    $$('button').forEach(b => { b.disabled = false; });
+    $$('button, #sample-select').forEach(b => { b.disabled = false; });
     $('#file-input').disabled = false;
   }
 }
@@ -65,9 +65,10 @@ function selected() {
 }
 function requireCollection(minimum = 1) {
   if (!collection) throw new Error('Add your PDFs or load the sample collection first.');
-  if (selected().length < minimum) throw new Error(`Select at least ${minimum} paper${minimum > 1 ? 's' : ''} in your collection.`);
+  if (selected().length < minimum) throw new Error(`Select at least ${minimum} document${minimum > 1 ? 's' : ''} in your collection.`);
 }
 function renderCollection() {
+  renderSampleContext();
   $('#paper-list').replaceChildren();
   $('#paper-count').textContent = String(collection?.papers.length || 0).padStart(2, '0');
   $('#clear-collection').hidden = !collection;
@@ -75,21 +76,22 @@ function renderCollection() {
     $('#library-info').textContent = 'Your collection stays in server memory until you clear it or restart.';
     return;
   }
-  $('#library-info').textContent = `${collection.pages} pages · ${collection.chunks} passages indexed. Select the papers you want to explore.`;
+  $('#library-info').textContent = `${collection.pages} pages · ${collection.chunks} passages indexed. Select the documents you want to explore.`;
   if (collection.namespace) $('#library-info').append(node('p', '', `Pinecone namespace: ${collection.namespace}. Clearing this collection leaves remote vectors intact.`));
   collection.papers.forEach(paper => {
     const label = node('label', 'paper-item');
     const check = node('input'); check.type = 'checkbox'; check.checked = true; check.value = paper.paper_id;
     const detail = node('div');
-    detail.append(node('strong', '', paper.title), node('small', '', `${paper.authors || paper.filename} · ${paper.page_count} pages`));
+    detail.append(node('strong', '', paper.title), node('small', '', `${paper.authors || paper.filename} · ${paper.indexed_pages || paper.page_count} indexed / ${paper.page_count} PDF pages`));
     label.append(check, detail);
     $('#paper-list').append(label);
   });
 }
 function resetOutput() {
+  $('#question').value = ''; $('#compare-toggle').checked = false;
   $('#answer').replaceChildren();
   $('#welcome').hidden = false;
-  $('#matrix').replaceChildren(node('div', 'empty-panel', 'Select at least two papers, then build your reading matrix.'));
+  $('#matrix').replaceChildren(node('div', 'empty-panel', 'Select at least two documents, then build your reading matrix.'));
   evidence = []; matrixEvidence = []; currentAnswer = null;
   renderEvidence();
 }
@@ -99,18 +101,34 @@ async function replaceCollection(next) {
   if (previous) await api(`/api/collections/${previous.id}`, { method: 'DELETE' }).catch(() => {});
   renderCollection(); resetOutput(); tab('ask');
 }
-function loadDemo() {
+function renderSampleContext() {
+  const sample = collection?.sample;
+  const context = $('#collection-context'); context.replaceChildren();
+  if (sample) {
+    context.append(node('h3', '', sample.title));
+    const details = node('details'); details.append(node('summary', '', 'Scope and source dates'), node('p', '', sample.scope)); context.append(details);
+    $('#sample-select').value = sample.id;
+  }
+  const starters = sample?.questions || (!collection ? status?.samples?.find(s => s.id === status.default_sample)?.questions : []) || [];
+  $('.suggestions').replaceChildren();
+  starters.forEach(item => {
+    const button = node('button', '', item.question + ' ↗'); button.dataset.question = item.question; button.dataset.compare = String(!!item.comparison); $('.suggestions').append(button);
+  });
+  $('#matrix-description').textContent = sample?.id === 'cms-ma' ? 'Inpatient coverage, outpatient review, documentation, and timeframes.' : 'Methods, datasets, findings, and limitations.';
+  $('#matrix-warning').textContent = sample?.comparison_note || 'Retrieved excerpts require interpretation and source review.';
+}
+function loadDemo(sampleId = 'cms-ma') {
   openWorkspace();
-  return task('Loading three papers. Building your evidence index…', async () => {
-    await replaceCollection(await api('/api/demo', { method: 'POST' }));
-    toast('Three papers ready. Start with a question or build a reading matrix.');
+  return task('Reading sample documents and building your evidence index…', async () => {
+    await replaceCollection(await api('/api/demo?sample_id=' + encodeURIComponent(sampleId), { method: 'POST' }));
+    toast(collection.sample.title + ' ready. Start with a question or build a reading matrix.');
   });
 }
 function upload(files) {
   if (!files.length) return;
   openWorkspace();
   task('Reading PDF pages and indexing your collection…', async () => {
-    if (files.length > 8) throw new Error('Choose up to 8 papers at a time.');
+    if (files.length > 8) throw new Error('Choose up to 8 documents at a time.');
     if ([...files].some(f => f.size > 20 * 1024 * 1024)) throw new Error('Each PDF must be smaller than 20 MB.');
     const form = new FormData();
     [...files].forEach(f => form.append('files', f));
@@ -138,6 +156,7 @@ function renderEvidence(activeId) {
     card.id = `evidence-${item.id}`;
     card.tabIndex = -1;
     card.append(node('span', 'evidence-label', `${item.id} / PAGE ${item.page}`), node('h3', '', item.title), node('p', '', item.text));
+    if (item.published) card.append(node('small', 'source-provenance', `Published ${item.published} · ${item.applicability}`));
     const link = node('a', '', 'Open original PDF page ↗');
     link.href = `/api/collections/${collection.id}/papers/${item.paper_id}#page=${item.page}`;
     link.target = '_blank'; link.rel = 'noopener'; card.append(link);
@@ -159,7 +178,8 @@ function renderAnswer(question, result) {
   target.append(node('h2', 'answer-question', question));
   const labels = { excerpts: 'SOURCE EXCERPTS · LOCAL MODE', answered: 'CITED ANSWER', insufficient: 'INSUFFICIENT EVIDENCE', error: 'MODEL UNAVAILABLE' };
   target.append(node('div', `answer-status ${result.status}`, labels[result.status] || result.status), node('p', 'answer-message', result.message));
-  if ($('#compare-toggle').checked) target.append(node('p', 'matrix-warning', 'Differences are not necessarily contradictions. Check datasets, metrics, and experimental conditions before comparing results.'));
+  if (result.scope) target.append(node('p', 'matrix-warning', result.scope));
+  if ($('#compare-toggle').checked) target.append(node('p', 'matrix-warning', $('#matrix-warning').textContent));
   result.claims.forEach(claim => {
     const article = node('article', 'answer-claim');
     article.append(node('span', 'claim-kind', claim.kind), node('p', '', claim.text));
@@ -169,7 +189,7 @@ function renderAnswer(question, result) {
   });
   const footer = node('div', 'answer-footer');
   const covered = new Set(result.claims.map(c => evidence.find(e => e.id === c.evidence_id)?.paper_id).filter(Boolean)).size;
-  footer.append(node('span', '', `${covered}/${selected().length} papers cited · ${(result.elapsed_ms / 1000).toFixed(2)}s`));
+  footer.append(node('span', '', `${covered}/${selected().length} documents cited · ${(result.elapsed_ms / 1000).toFixed(2)}s`));
   const download = node('button', 'text-button', 'Export trail ↓'); download.addEventListener('click', exportTrail); footer.append(download); target.append(footer);
   const details = node('details', 'graph-trace'); details.append(node('summary', '', 'Inspect the retrieval workflow'));
   const list = node('ol'); result.trace.forEach(step => list.append(node('li', '', step))); details.append(list); target.append(details);
@@ -192,12 +212,13 @@ async function submitQuestion(event) {
   });
 }
 async function buildMatrix() {
-  await task('Finding methods, datasets, findings, and limitations…', async () => {
+  await task('Finding source passages for the selected documents…', async () => {
     requireCollection(2);
     const result = await api(`/api/collections/${collection.id}/compare`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: 'Compare selected papers', paper_ids: selected(), comparison: true }),
     });
+    $('#matrix-warning').textContent = result.note;
     matrixEvidence = result.evidence; evidence = matrixEvidence; renderEvidence();
     const scroll = node('div', 'matrix-scroll'); const table = node('table', 'matrix-table');
     const head = node('thead'); const heading = node('tr'); heading.append(node('th', '', 'Dimension'));
@@ -216,7 +237,14 @@ async function buildMatrix() {
 async function loadEvaluation() {
   const target = $('#evaluation'); target.replaceChildren(node('p', 'eval-note', 'Loading evaluation results…'));
   try {
-    const report = await api('/api/evaluation'); target.replaceChildren();
+    const sampleId = collection?.sample?.id || 'cms-ma';
+    const report = await api('/api/evaluation?sample_id=' + sampleId); target.replaceChildren();
+    if (report.sample_id === 'cms-ma') {
+      target.append(node('h3', '', 'CMS source checks · demo mode'), node('p', 'eval-note', report.description), node('p', 'eval-note', `${report.passed}/${report.total} checks passed · ${report.generated_at}`), node('p', 'eval-note', report.limitations));
+      report.cases.forEach(test => { const item = node('div', 'eval-case', test.question); item.append(node('small', '', `${test.passed ? 'PASS' : 'FAIL'} · ${test.kind} · ${test.observation}`)); target.append(item); });
+      return;
+    }
+    target.append(node('h3', '', 'RAG / Self-RAG / CRAG evaluation only'));
     target.append(node('p', 'eval-note', report.description));
     const cards = node('div', 'eval-cards');
     for (const [key, label] of [['baseline', 'Dense baseline · evidence recall@6'], ['hybrid', 'Hybrid + paper coverage · evidence recall@6']]) {
@@ -235,21 +263,22 @@ function exportTrail() {
   if (!currentAnswer) return;
   const a = currentAnswer;
   let text = `# Evidence Atlas RAG research trail\n\nQuestion: ${a.question}\n\nMode: ${a.mode} | Status: ${a.status}\n\n${a.message}\n\n`;
+  if (a.scope) text += `Scope: ${a.scope}\n\n`;
   a.claims.forEach(claim => {
     const e = a.evidence.find(item => item.id === claim.evidence_id);
     text += `## ${claim.kind}\n\n${claim.text}\n\nSource: ${e.title}, PDF page ${e.page} (${e.filename}).\n\n`;
     if (claim.kind !== 'Source excerpt') text += `Supporting quote: ${claim.quote}\n\n`;
     if (e.url) text += `${e.url}\n\n`;
   });
-  text += '\nCompare experimental conditions before interpreting differences.\n';
+  text += `\n${$('#matrix-warning').textContent}\n`;
   const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
   const link = node('a'); link.href = url; link.download = 'evidence-atlas-rag-research-trail.md'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 $$('[data-open]').forEach(button => button.addEventListener('click', openWorkspace));
-$$('[data-demo]').forEach(button => button.addEventListener('click', loadDemo));
-$$('[data-art]').forEach(button => button.addEventListener('click', loadDemo));
+$$('[data-demo]').forEach(button => button.addEventListener('click', () => loadDemo(button.dataset.demo || 'cms-ma')));
+$$('[data-art]').forEach(button => button.addEventListener('click', () => loadDemo(button.dataset.demo || 'cms-ma')));
 $('#go-home').addEventListener('click', openHome);
 $$('.wordmark').forEach(link => link.addEventListener('click', openHome));
 $$('.site-header nav a').forEach(link => link.addEventListener('click', openHome));
@@ -260,10 +289,12 @@ $('#file-input').addEventListener('change', event => upload(event.target.files))
 $('#question-form').addEventListener('submit', submitQuestion);
 $('#question').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitQuestion(); } });
 $('#build-matrix').addEventListener('click', buildMatrix);
-$$('[data-question]').forEach(button => button.addEventListener('click', () => {
+$('.suggestions').addEventListener('click', event => {
+  const button = event.target.closest('[data-question]'); if (!button) return;
   $('#question').value = button.dataset.question; $('#compare-toggle').checked = button.dataset.compare === 'true';
   $('#question').focus(); if (collection) submitQuestion();
-}));
+});
+$('#load-selected-sample').addEventListener('click', () => loadDemo($('#sample-select').value));
 $('#clear-collection').addEventListener('click', () => task('Clearing your collection…', async () => {
   const remoteNamespace = collection?.namespace;
   if (collection) await api(`/api/collections/${collection.id}`, { method: 'DELETE' });
@@ -275,9 +306,9 @@ zone.addEventListener('dragover', event => { event.preventDefault(); zone.classL
 zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
 zone.addEventListener('drop', event => { event.preventDefault(); zone.classList.remove('dragover'); if (!working) upload(event.dataTransfer.files); });
 api('/api/status').then(result => {
-  status = result;
+  status = result; renderSampleContext();
   $('#mode-badge').textContent = status.mode === 'live' ? `LIVE MODE · ${status.vector_backend.toUpperCase()}` : 'LOCAL EXCERPT MODE';
-  $('#privacy-note').textContent = status.mode === 'live' ? 'Live mode: paper text is sent to your configured embedding provider. Questions and retrieved passages are sent to your model provider. Collections are not saved to disk.' : 'Local mode: no model calls and no paper text leaves this server. Answers are verbatim excerpts, using lexical retrieval. Enable live mode for semantic search and synthesis.';
+  $('#privacy-note').textContent = status.mode === 'live' ? 'Live mode: document text is sent to your configured embedding provider. Questions and retrieved passages are sent to your model provider. Collections are not saved to disk.' : 'Local mode: no model calls and no document text leaves this server. Answers are verbatim excerpts, using lexical retrieval. Enable live mode for semantic search and synthesis.';
   if (status.vector_backend === 'pinecone') $('#privacy-note').append(node('p', '', 'Pinecone stores vectors and passage text remotely in an isolated namespace. PDFs and session state remain local; remote vectors alone do not restore a collection after restart.'));
   if (!status.configured) toast(status.configuration_message || 'Check your local .env configuration.');
 }).catch(() => { $('#mode-badge').textContent = 'SERVER UNAVAILABLE'; toast('Cannot reach Evidence Atlas RAG. Start the Python server and reload.'); });

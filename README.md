@@ -2,11 +2,11 @@
 
 The product and repository share the Evidence Atlas RAG name. The internal Python package retains its existing import path; see [compatibility notes](docs/COMPATIBILITY.md) for the supported legacy configuration identifiers.
 
-A local research-paper comparison workspace built with LangChain and LangGraph. It includes a responsive editorial landing page, PDF uploads, cited research questions, a source-excerpt reading matrix, inspectable PDF evidence, research-trail export, and a reproducible evaluation.
+A local PDF evidence workspace built with LangChain and LangGraph. The default sample is **CMS Medicare Advantage prior authorization for inpatient and outpatient medical services**, using three official U.S. government PDFs. The RAG/Self-RAG/CRAG research sample remains selectable. It includes a responsive editorial landing page, PDF uploads, cited research questions, a source-excerpt reading matrix, inspectable PDF evidence, research-trail export, and a reproducible evaluation.
 
-**Scope:** My RAG app helps AI learners answer research questions from the RAG, Self-RAG, and CRAG papers in a web app, targeting 95% faithfulness and responses within 15 seconds.
+**Original research-sample scope:** My RAG app helps AI learners answer research questions from the RAG, Self-RAG, and CRAG papers in a web app, targeting 95% faithfulness and responses within 15 seconds.
 
-Those are targets, not verified achievements. This first version works without credentials in **local excerpt mode**. Live semantic embeddings and generated answers need model configuration and have not been tested against a real provider.
+Those are targets, not verified achievements. This first version works without credentials in **local excerpt mode**. Live semantic embeddings and generated answers need model configuration. A bounded OpenAI check reached a HTTP 429 quota error on its first embedding request; live answers remain unverified.
 
 ## Run the existing workspace
 
@@ -16,7 +16,7 @@ From this project directory in PowerShell:
 .\.venv\Scripts\python.exe -m uvicorn papertrail.server:app --host 127.0.0.1 --port 8000
 ```
 
-Open <http://127.0.0.1:8000>. Click **Explore the sample collection**, then ask a question or build a reading matrix. Stop with Ctrl+C. Complete the fresh setup below first to install dependencies and download the three PDFs. `run.cmd` also starts the server from this folder.
+Open <http://127.0.0.1:8000>. Click **Explore CMS guidance**, then ask a question or build a reading matrix. Stop with Ctrl+C. Complete the fresh setup below first to install dependencies and download both sample collections. `run.cmd` also starts the server from this folder.
 
 The self-contained [project brief](docs/project-brief.html) opens directly in a browser without starting the app. It records the primer, six-field framework, retrieval design notes, and implementation status.
 
@@ -40,7 +40,7 @@ On macOS/Linux use `python3 -m venv .venv` and `.venv/bin/python` instead. The l
 | `demo` (default) | Deterministic hashed word vectors + BM25 + rank fusion | Verbatim source excerpts, explicitly labeled | No model calls; sample download is a separate explicit step |
 | `live` | Configured semantic embeddings + BM25 + rank fusion | Structured cited claims, quote checks, model evidence audit | Paper text to embedding provider; questions and retrieved text to model provider |
 
-Copy `.env.example` to `.env`, set `EVIDENCE_ATLAS_MODE=live`, and supply `MODEL_API_KEY`. The initial defaults are `gpt-4.1-mini` and `text-embedding-3-small`. These are configuration defaults, not a promise that a particular account has access. Set separate embedding credentials/base URL if needed. Restart after changes.
+If `.env` does not exist, copy `.env.example` to it; otherwise edit the existing file locally. Set `EVIDENCE_ATLAS_MODE=live`, and supply `MODEL_API_KEY`. The initial defaults are `gpt-4.1-mini` and `text-embedding-3-small`. These are configuration defaults, not a promise that a particular account has access. Set separate embedding credentials/base URL if needed. Restart after changes.
 
 An OpenAI-compatible provider, including a suitably configured Nebius account, needs compatible chat, embedding, and JSON-schema structured-output endpoints. No Nebius model IDs, credits, account access, or compatibility have been verified. Failed requests display a configuration error and never fabricate a successful answer. Never put keys in frontend code or commit `.env`.
 
@@ -54,7 +54,17 @@ Set `EVIDENCE_ATLAS_MODE=live`, `VECTOR_BACKEND=pinecone`, `MODEL_API_KEY`, `PIN
 
 Pinecone retains vectors and passage text; PDFs, BM25 input, and the collection catalog remain process-local. **Clear collection clears local state only and does not delete remote vectors.** Reindexing creates a new namespace. Live Pinecone access is not verified; all adapter test results use mocks. No LangSmith account or remote tracing has been configured.
 
-## Corpus and ingestion
+## Default healthcare sample
+
+The CMS sample indexes selected coverage, prior-authorization process, concurrent-review, and notice provisions. It preserves physical PDF pages and distinguishes 2024 coverage guidance, 2026 process/protection changes, and the cited 2027 API requirement. It is an educational administrative demo, with no patient records, individual approval decisions, or universal payer checklist.
+
+See [healthcare source provenance, boundaries, test questions, and OpenAI readiness](docs/HEALTHCARE_SAMPLE.md). The [CMS manifest](data/cms-sources.json) pins official URLs, hashes, dates, and exact indexed sections. The current selection covers 11 distinct pages and 20 chunks within three complete original PDFs. Hash changes stop indexing for review.
+
+Use the workspace selector to load CMS guidance or the original research sample. Switching creates a separate collection and clears the previous question, answer, matrix, and citations. `POST /api/demo` defaults to `cms-ma`; `POST /api/demo?sample_id=rag` loads the research papers. `scripts/download_papers.py` downloads both; `--sample cms-ma` or `--sample rag` downloads one.
+
+The separate [CMS source check report](evaluation/HEALTHCARE_REPORT.md) records **18/18 checks** using actual PDF sections, page/phrase anchors, refusal cases, and source integrity. These do not measure clinical accuracy, legal completeness, or live-answer faithfulness. The original research metrics below apply only to the three research papers.
+
+## Research corpus and ingestion
 
 Three real English arXiv PDFs are recorded in [data/sources.json](data/sources.json):
 
@@ -95,7 +105,7 @@ The displayed workflow trace is local application data. LangSmith remote tracing
 .\.venv\Scripts\python.exe -m scripts.evaluate
 ```
 
-The latest run passed **32 tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, and the optional Pinecone adapter using mocks. Mocked live tests are not real provider validation.
+The latest run passed **38 tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, and the optional Pinecone adapter using mocks. Mocked live tests are not real provider validation.
 
 The [evaluation report](evaluation/REPORT.md) and [raw results](evaluation/results.json) record 14 questions, including 10 evidence-annotated direct/cross-paper questions and 4 fallback/ambiguous/adversarial cases:
 
@@ -119,3 +129,5 @@ The [project documentation](docs/PROJECT_DOCUMENTATION.md) is the detailed recor
 ## Implementation references
 
 The implementation was checked against the official [LangGraph graph API](https://docs.langchain.com/oss/python/langgraph/graph-api) and [LangChain in-memory vector store API](https://reference.langchain.com/python/langchain-core/vectorstores/in_memory/InMemoryVectorStore). These informed the StateGraph and store implementation.
+
+The CMS checks can be regenerated with `python -m scripts.evaluate_healthcare`; the command forces demo/memory and disables dotenv loading. CI also verifies the downloaded CMS PDFs against their pinned hashes and committed source excerpts.

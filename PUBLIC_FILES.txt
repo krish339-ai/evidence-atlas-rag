@@ -41,3 +41,12 @@ docs/PROJECT_DOCUMENTATION.md
 docs/COMPATIBILITY.md
 docs/VERIFICATION.md
 docs/PUBLICATION.md
+papertrail/samples.py
+data/cms-sources.json
+scripts/evaluate_healthcare.py
+tests/test_healthcare.py
+tests/cms-source-excerpts.json
+evaluation/healthcare-questions.json
+evaluation/healthcare-results.json
+evaluation/HEALTHCARE_REPORT.md
+docs/HEALTHCARE_SAMPLE.md

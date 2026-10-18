@@ -1,5 +1,21 @@
 # Evidence Atlas RAG project documentation
 
+## Current default: CMS Medicare Advantage guidance
+
+The application now opens with **CMS Medicare Advantage prior authorization**, covering inpatient and outpatient medical services. The secondary sample preserves RAG, Self-RAG, and CRAG. [Healthcare sample documentation](HEALTHCARE_SAMPLE.md) records official government sources, publication/applicability dates, indexed sections, exclusions, testing questions, and configuration status.
+
+The default collection indexes 13 selected spans on 11 physical pages, producing 20 chunks from three original PDFs (148 total pages). A SHA-256 check and exact section boundaries prevent silently adopting changed government documents. Full original PDFs remain inspectable. Older FAQ reopening discussion is excluded in favor of the 2026 amendments. Scope notes distinguish MA from other payers, inpatient from outpatient, criteria from review/notification, 2026 operational requirements from the cited 2027 API requirement, and generic guidance from patient-specific decisions.
+
+The selector, main CTA, starter questions, and default `/api/demo` route use this CMS sample. Selecting a sample creates its own index and collection; the browser clears prior questions, answers, matrix evidence, and citations. Uploads use independent collections. The CMS reading matrix uses inpatient coverage, outpatient/concurrent review, documentation/notices, and timeframes. Missing evidence stays explicit.
+
+The CMS scope guard returns insufficient evidence for common unsupported requests before any provider call. Live generation and audit receive additional program/date/setting instructions. This conservative keyword filter is not comprehensive, and source overlap is not proof of answerability. No patient record processing, authorization submission, plan-specific checklist, or approval prediction is implemented.
+
+**Verification:** 38 automated tests pass. The separate [CMS report](../evaluation/HEALTHCARE_REPORT.md) records 18/18 source checks, including ten answerable questions, seven refusal cases, and verification that committed excerpts match all three hash-pinned original PDFs. Tests include collection isolation and original PDF serving. CI downloads the CMS PDFs and repeats the integrity checks. This is a small development set, not clinical/legal validation or live model measurement.
+
+**Live status:** a bounded OpenAI check confirmed expected URLs, a locally present key, `gpt-4.1-mini`, `text-embedding-3-small`, and live/memory process settings. Its first embedding request returned a HTTP 429 quota error, so no generation or audit requests followed. Live outputs and the 95% faithfulness / 15-second targets remain unverified. Demo/memory is the verified operating mode; Pinecone remains inactive.
+
+The research design and numeric evaluation below are retained as **research-sample history only**. They do not measure the healthcare sample.
+
 Evidence Atlas RAG is a local research-paper reading and comparison app. Its source repository is [Evidence Atlas RAG](https://github.com/krish339-ai/evidence-atlas-rag). This document records the problem, datasets, implemented design, prompting decisions, actual iterations, and observations. The [project brief](project-brief.html) provides a compact planning reference; the [README](../README.md) provides setup instructions.
 
 ## Project overview
@@ -26,7 +42,7 @@ The reading matrix covers methods, datasets, findings, and limitations. It conta
 
 The graph directly invokes LangChain components; there is no explicit LCEL pipe chain. Its visible trace is local application state. Remote LangSmith tracing is disabled around the graph invocation. A separate semantic reranker, OCR, accounts, durable collection catalog, and hosted deployment are not implemented.
 
-## Datasets and provenance
+## Research datasets and provenance
 
 The sample contains three real, version-pinned English research papers:
 
@@ -79,7 +95,7 @@ Codex assisted with implementation, dependency debugging, browser inspection, an
 
 ## Evaluation and observations
 
-The latest local automated run passed **32 tests**. Tests cover parsing, chunk metadata, invalid/scanned PDFs, retrieval filters and coverage, exact excerpts, bounded refusal, citation validation, mocked model outcomes, API upload/ask/PDF/delete behavior, matrix selection, and mocked Pinecone behavior. Tests explicitly force demo/memory configuration so local credentials cannot trigger provider calls.
+The current local automated run passed **38 tests**, including the CMS checks described above. Tests cover parsing, chunk metadata, invalid/scanned PDFs, retrieval filters and coverage, exact excerpts, bounded refusal, citation validation, mocked model outcomes, API upload/ask/PDF/delete behavior, matrix selection, and mocked Pinecone behavior. Tests explicitly force demo/memory configuration so local credentials cannot trigger provider calls.
 
 The [evaluation report](../evaluation/REPORT.md), [questions](../evaluation/questions.json), and [raw results](../evaluation/results.json) record 14 authored questions over the real corpus. Ten answerable questions have page and phrase anchors, which the evaluation checks against extracted PDF text before scoring. Four additional cases cover ambiguous, unanswerable, and adversarial requests.
 
