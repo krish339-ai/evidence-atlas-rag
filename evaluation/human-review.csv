@@ -1,0 +1,1 @@
+question_id,provider,chat_model,embedding_model,claim_number,claim_text,cited_paper,cited_pdf_page,supported_yes_no_uncertain,citation_valid_yes_no,relevance_0_1_2,response_status,refusal_correct_yes_no,end_to_end_seconds,reviewer_notes

@@ -1,0 +1,2 @@
+-r requirements.txt
+langchain-pinecone>=0.2,<1
