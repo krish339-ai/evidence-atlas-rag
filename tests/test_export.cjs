@@ -98,6 +98,9 @@ test('completed refusals clear the composer but provider and network errors pres
   const { sandbox, box } = composerContext({ fail: true });
   await sandbox.submitQuestion();
   assert.equal(box.value, 'What technical skills are listed?');
+  assert.equal(sandbox.answers.length, 1);
+  assert.equal(sandbox.answers[0].result.status, 'error');
+  assert.equal(sandbox.answers[0].result.message, 'Temporary connection failure');
 });
 
 test('a new draft typed during a request is preserved', async () => {
@@ -116,4 +119,64 @@ test('suggestions reflect the selected documents and remain after a response', a
   selected.splice(0);
   sandbox.renderSuggestions();
   assert.equal(get('#suggestion-panel').hidden, true);
+});
+
+function restorationContext(saved, { fail = false, preload = null, deferred = false } = {}) {
+  const storage = new Map(saved === undefined ? [] : [['evidence-atlas-active-collection', JSON.stringify(saved)]]);
+  const inputs = [{ value: 'a', checked: true }, { value: 'b', checked: true }];
+  const fixture = { id: 'uploaded', papers: [{ paper_id: 'a' }, { paper_id: 'b' }], chunks: 9, namespace: 'fixture-only' };
+  const sandbox = vm.createContext({
+    sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+    document: { querySelector: () => preload ? { content: preload } : null,
+      querySelectorAll: selector => selector.endsWith(':checked') ? inputs.filter(i => i.checked) : inputs },
+    requests: [], answers: [], fixture,
+    request: () => fail ? Promise.reject(new Error('Unavailable')) : deferred ? new Promise(resolve => { sandbox.finish = resolve; }) : Promise.resolve(fixture),
+  });
+  vm.runInContext(script.slice(0, script.indexOf("$$('[data-open]')")), sandbox);
+  vm.runInContext(`
+    api = async url => { requests.push(url); return request(); };
+    renderCollection = resetOutput = tab = renderSuggestions = openWorkspace = toast = () => {};
+    renderAnswer = (question, result) => answers.push(result);
+  `, sandbox);
+  return { sandbox, storage, inputs };
+}
+
+test('refresh restores uploaded collection and selection without upload or model calls', async () => {
+  const { sandbox, storage, inputs } = restorationContext({ id: 'uploaded', selected: ['b'] }, { preload: '/api/preloaded-test' });
+  await sandbox.restoreCollection();
+  assert.deepEqual(sandbox.requests, ['/api/collections/uploaded']);
+  assert.deepEqual(inputs.map(i => i.checked), [false, true]);
+  const saved = JSON.parse(storage.get('evidence-atlas-active-collection'));
+  assert.deepEqual(saved, { id: 'uploaded', selected: ['b'] });
+  assert.equal(vm.runInContext('collection.chunks', sandbox), 9);
+});
+
+test('expired or temporarily unavailable collection never falls back to another document', async () => {
+  const { sandbox, storage } = restorationContext({ id: 'uploaded', selected: [] }, { fail: true, preload: '/api/preloaded-test' });
+  await sandbox.restoreCollection();
+  assert.deepEqual(sandbox.requests, ['/api/collections/uploaded']);
+  assert.equal(sandbox.answers[0].status, 'error');
+  assert.equal(vm.runInContext('collection', sandbox), null);
+  assert.equal(JSON.parse(storage.get('evidence-atlas-active-collection')).id, 'uploaded');
+});
+
+test('clearing a collection suppresses automatic test preload on refresh', async () => {
+  const { sandbox } = restorationContext({ cleared: true }, { preload: '/api/preloaded-test' });
+  await sandbox.restoreCollection();
+  assert.equal(sandbox.requests.length, 0);
+});
+
+test('a late restore cannot overwrite a replacement or clear operation', async () => {
+  const { sandbox } = restorationContext({ id: 'uploaded' }, { deferred: true });
+  const pending = sandbox.restoreCollection();
+  vm.runInContext('collectionRevision++; collection = {id: "replacement"}', sandbox);
+  sandbox.finish(sandbox.fixture);
+  await pending;
+  assert.equal(vm.runInContext('collection.id', sandbox), 'replacement');
+});
+
+test('restoration preserves an intentionally empty document selection', async () => {
+  const { sandbox, inputs } = restorationContext({ id: 'uploaded', selected: [] });
+  await sandbox.restoreCollection();
+  assert.ok(inputs.every(input => !input.checked));
 });

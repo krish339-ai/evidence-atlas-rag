@@ -1,6 +1,6 @@
 # Configure the live model and Pinecone
 
-The optional adapter is implemented and tested with mocks. A real Pinecone connection and real model calls have **not** been verified. Use an existing compatible index; this app never creates an index, changes its configuration, or deletes remote vectors.
+The optional adapter has mocked regression coverage and a bounded live integration check: one four-page public PDF, twelve chunks, namespace visibility, semantic retrieval, and a generated answer with a page citation. Human review found an omitted source exception despite audit approval; generation/audit instructions and a conservative local exclusion guard now address that failure. This is not a quality benchmark. Use an existing compatible index; this app never creates an index, changes its configuration, or deletes remote vectors.
 
 ## Enter credentials locally
 
@@ -34,15 +34,62 @@ Ingestion waits up to 12 seconds for the namespace's reported vector count becau
 
 Hybrid retrieval remains semantic-vector ranks plus local BM25 ranks and reciprocal rank fusion. It is not Pinecone-native sparse hybrid search or a model reranker. Dense candidates are capped at 1,000 per query for payload size; returned chunk IDs are reconciled with the current local collection before citations are displayed.
 
+The adapter passes independent document copies to Pinecone ingestion because the vector-store library adds a transport `text` field to metadata. Local source metadata stays unchanged, and evidence construction owns its identifiers and passage text even if transport metadata contains reserved fields. This prevents a successful upload from failing during subsequent question answering.
+
 ## Persistence and clearing
 
-Pinecone retains vectors **and passage text/metadata** after the local process stops. Original PDF bytes, the local BM25 corpus, collection IDs, and the UI session remain in memory. Remote vectors alone do not restore a usable collection after restart, and this prototype does not yet implement a persistent collection catalog.
+Pinecone retains vectors **and passage text/metadata** after the local process stops. Original PDF bytes, the local BM25 corpus, and the collection catalog remain in server memory. The browser now stores only the active collection ID and selected document IDs in tab-scoped `sessionStorage`. A refresh reads the existing descriptor through `GET /api/collections/{id}` without embedding or upserting. A cleared or expired collection produces an explicit restoration error; it never silently substitutes another document. Transient failures retain the pointer for retry.
+
+Remote vectors alone do not restore a usable collection after **server restart**, and this prototype does not implement a durable collection catalog. Closing a tab ends its saved selection. Refresh restoration does not preserve chat history or answer text.
+
+```mermaid
+flowchart LR
+    B[Browser tab: collection and selection IDs] -->|Refresh: read descriptor| L[Local server: catalog, PDFs, chunks, BM25]
+    L -->|Dense query in collection namespace| P[Pinecone: vectors and passage metadata]
+    P -->|Matching chunk IDs| L
+    L -->|Verified descriptor| B
+```
+
+The three layers have different lifetimes: the tab remembers what to open, the running backend knows how to serve it, and Pinecone retains remote vectors. Persistence of the third layer does not replace the first two.
+
+## Index, namespace, and chunks
+
+```mermaid
+flowchart TD
+    I[Existing dense cosine index] --> A[Collection A namespace]
+    I --> B[Collection B namespace]
+    A --> A1[Chunk: vector, text, paper ID, page, chunk ID]
+    A --> A2[Next page-preserving chunk]
+    B --> B1[Separate collection chunks]
+```
+
+These are illustrative labels, not account identifiers. Each new upload or sample gets an isolated namespace. Chunk IDs reconcile remote matches with the current local corpus; citations keep original physical PDF pages.
+
+| Configuration verified in the isolated test | Value |
+|---|---|
+| Vector type | Dense, externally generated embeddings |
+| Dimension / metric | 1536 / cosine |
+| Deployment | Serverless, AWS, us-east-1 |
+| Embedding model | `text-embedding-3-small` |
+| Resource lifecycle | Existing index; no automatic provisioning or remote deletion |
+
+| Behavior | Memory backend | Pinecone backend |
+|---|---|---|
+| Dense vectors | Local process | Remote collection namespace |
+| BM25 corpus and original PDFs | Local process | Local process |
+| Same-tab refresh | Restores while server runs | Restores while server runs |
+| Server restart | Local collection lost | Local collection lost; remote vectors remain |
+| Live generation | Configured provider | Same configured provider |
 
 **Clear collection clears local state only.** It deliberately does not delete Pinecone data. Keep the namespace shown by the app if you want to manage those vectors later in your Pinecone console. Reindexing creates another namespace; review unused namespaces yourself. No data in unrelated namespaces is read, overwritten, or deleted by this adapter.
 
 To return to a credential-free local demo, set `EVIDENCE_ATLAS_MODE=demo` and `VECTOR_BACKEND=memory`, then restart. Never silently substitute local retrieval after a failed live configuration; the app surfaces the error.
 
 ## Verification boundaries
+
+A public four-page PDF produced twelve vectors and supported a bounded ingestion/retrieval/answer check. Human review caught an omitted payer exception despite model approval. The captured omission is rejected offline; a later public live replay included the exception and passed the audit. The transport metadata collision was corrected and live submission succeeded. Browser refresh of a nine-passage upload was verified on the root page and the private test wrapper without reindexing.
+
+Two uploaded-document questions originally failed for different reasons: unknown citation and evidence-audit rejection. A request-specific citation enum prevents selection of unprovided IDs. A subsequent bounded replay returned answers, but source review caught facts combined under one citation. The new literal-detail guard rejects those captured drafts offline. Separately cited synthetic role and skill lists passed live checks after schema clarification. A final authorized replay of the two original questions returned separately cited claims and passed the audit; individual source support was reviewed. The answers were not exhaustive lists, so completeness remains a limitation. These tests are not broad answer-quality evidence.
 
 Mock tests cover mismatched dimensions/metrics, non-ready/sparse/integrated indexes, missing credentials, safe namespaces, isolated writes, and redacted partial-write failures. They do not prove your account permissions, network, billing, embedding-model availability, or service latency. The current 75% → 80% retrieval comparison is an offline result, not a Pinecone benchmark.
 

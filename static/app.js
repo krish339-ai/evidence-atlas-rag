@@ -8,6 +8,8 @@ let matrixEvidence = [];
 let working = false;
 let status = null;
 let toastTimer;
+let collectionRevision = 0;
+const COLLECTION_SESSION_KEY = 'evidence-atlas-active-collection';
 
 function node(tag, cls, text) {
   const element = document.createElement(tag);
@@ -73,7 +75,7 @@ function renderCollection() {
   $('#paper-count').textContent = String(collection?.papers.length || 0).padStart(2, '0');
   $('#clear-collection').hidden = !collection;
   if (!collection) {
-    $('#library-info').textContent = 'Your collection stays in server memory until you clear it or restart.';
+    $('#library-info').textContent = 'This tab restores your collection after refresh while the server is running. Clear or server restart ends the collection.';
     renderSuggestions();
     return;
   }
@@ -98,10 +100,49 @@ function resetOutput() {
   renderEvidence();
 }
 async function replaceCollection(next) {
+  collectionRevision++;
   const previous = collection;
   collection = next;
-  if (previous) await api(`/api/collections/${previous.id}`, { method: 'DELETE' }).catch(() => {});
   renderCollection(); resetOutput(); tab('ask');
+  rememberCollection();
+  if (previous && previous.id !== next.id) await api(`/api/collections/${previous.id}`, { method: 'DELETE' }).catch(() => {});
+}
+function rememberCollection(cleared = false) {
+  try {
+    sessionStorage.setItem(COLLECTION_SESSION_KEY, JSON.stringify(collection ?
+      { id: collection.id, selected: selected() } : { cleared }));
+  } catch (_) {
+    toast('Browser storage is unavailable. This tab cannot restore its collection after refresh.');
+  }
+}
+async function restoreCollection() {
+  if (collection) return;
+  const revision = collectionRevision;
+  try {
+    const raw = sessionStorage.getItem(COLLECTION_SESSION_KEY);
+    const saved = raw ? JSON.parse(raw) : null;
+    if (saved?.cleared) return;
+    const preload = document.querySelector('meta[name="evidence-atlas-preload"]')?.content;
+    if (!saved && !preload) return;
+    if (saved && (typeof saved.id !== 'string' || !saved.id)) throw new Error('Saved collection is invalid.');
+    // A stale saved upload must never silently fall back to the original sample.
+    const restored = await api(saved ? `/api/collections/${encodeURIComponent(saved.id)}` : preload);
+    if (collection || revision !== collectionRevision) return;
+    collection = restored;
+    renderCollection(); resetOutput(); tab('ask');
+    if (saved && Array.isArray(saved.selected)) {
+      $$('#paper-list input').forEach(input => { input.checked = saved.selected.includes(input.value); });
+      renderSuggestions();
+    }
+    rememberCollection();
+    openWorkspace();
+  } catch (_) {
+    if (collection || revision !== collectionRevision) return;
+    openWorkspace();
+    renderAnswer('Collection unavailable', { status: 'error', mode: status?.mode || 'unknown',
+      message: 'The saved collection could not be restored. The server may have restarted or the collection was cleared. Check the connection before re-uploading; Pinecone vectors alone do not restore local PDF and session state.',
+      claims: [], evidence: [], trace: ['Collection restoration failed; no document was re-indexed'] });
+  }
 }
 function renderSampleContext() {
   const sample = collection?.sample;
@@ -188,7 +229,7 @@ function renderAnswer(question, result) {
   $('#welcome').hidden = true;
   const target = $('#answer'); target.replaceChildren();
   target.append(node('h2', 'answer-question', question));
-  const labels = { excerpts: 'SOURCE EXCERPTS · LOCAL MODE', answered: 'CITED ANSWER', insufficient: 'INSUFFICIENT EVIDENCE', unverified: 'ANSWER NOT VERIFIED', error: 'MODEL UNAVAILABLE' };
+  const labels = { excerpts: 'SOURCE EXCERPTS · LOCAL MODE', answered: 'CITED ANSWER', insufficient: 'INSUFFICIENT EVIDENCE', unverified: 'ANSWER NOT VERIFIED', error: 'REQUEST FAILED' };
   target.append(node('div', `answer-status ${result.status}`, labels[result.status] || result.status), node('p', 'answer-message', result.message));
   if (result.scope) target.append(node('p', 'matrix-warning', result.scope));
   if ($('#compare-toggle').checked) target.append(node('p', 'matrix-warning', $('#matrix-warning').textContent));
@@ -201,7 +242,8 @@ function renderAnswer(question, result) {
   });
   const footer = node('div', 'answer-footer');
   const covered = new Set(result.claims.map(c => evidence.find(e => e.id === c.evidence_id)?.paper_id).filter(Boolean)).size;
-  footer.append(node('span', '', `${covered}/${selected().length} documents cited · ${(result.elapsed_ms / 1000).toFixed(2)}s`));
+  const timing = Number.isFinite(result.elapsed_ms) ? ` · ${(result.elapsed_ms / 1000).toFixed(2)}s` : '';
+  footer.append(node('span', '', `${covered}/${selected().length} documents cited${timing}`));
   const download = node('button', 'text-button', 'Export trail ↓'); download.addEventListener('click', exportTrail); footer.append(download); target.append(footer);
   const details = node('details', 'graph-trace'); details.append(node('summary', '', 'Inspect the retrieval workflow'));
   const list = node('ol'); result.trace.forEach(step => list.append(node('li', '', step))); details.append(list); target.append(details);
@@ -217,10 +259,18 @@ async function submitQuestion(event) {
   await task('Retrieving evidence and checking the trail…', async () => {
     const comparison = $('#compare-toggle').checked;
     requireCollection(comparison ? 2 : 1);
-    const result = await api(`/api/collections/${collection.id}/ask`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, paper_ids: selected(), comparison }),
-    });
+    let result;
+    try {
+      result = await api(`/api/collections/${collection.id}/ask`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, paper_ids: selected(), comparison }),
+      });
+    } catch (error) {
+      // Keep failed requests visible after the temporary toast would disappear.
+      result = { status: 'error', mode: status?.mode || 'unknown',
+        message: error.message || 'The question could not be submitted. Please retry.',
+        claims: [], evidence: [], trace: ['Question request failed; no answer returned'] };
+    }
     renderAnswer(question, result);
     const input = $('#question');
     if (result.status !== 'error' && input.value.trim() === question) input.value = '';
@@ -324,22 +374,25 @@ $('#question-form').addEventListener('submit', submitQuestion);
 $('#question').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitQuestion(); } });
 $('#build-matrix').addEventListener('click', buildMatrix);
 $('.suggestions').addEventListener('click', runSuggestedQuestion);
-$('#paper-list').addEventListener('change', renderSuggestions);
+$('#paper-list').addEventListener('change', () => { renderSuggestions(); rememberCollection(); });
 $('#load-selected-sample').addEventListener('click', () => loadDemo($('#sample-select').value));
 $('#clear-collection').addEventListener('click', () => task('Clearing your collection…', async () => {
   const remoteNamespace = collection?.namespace;
   if (collection) await api(`/api/collections/${collection.id}`, { method: 'DELETE' });
+  collectionRevision++;
   collection = null; renderCollection(); resetOutput();
+  rememberCollection(true);
   if (remoteNamespace) toast(`Local collection cleared. Pinecone vectors remain in ${remoteNamespace}.`);
 }));
 const zone = $('#dropzone');
 zone.addEventListener('dragover', event => { event.preventDefault(); zone.classList.add('dragover'); });
 zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
 zone.addEventListener('drop', event => { event.preventDefault(); zone.classList.remove('dragover'); if (!working) upload(event.dataTransfer.files); });
-api('/api/status').then(result => {
+api('/api/status').then(async result => {
   status = result; renderSampleContext(); renderSuggestions();
   $('#mode-badge').textContent = status.mode === 'live' ? `LIVE MODE · ${status.vector_backend.toUpperCase()}` : 'LOCAL EXCERPT MODE';
   $('#privacy-note').textContent = status.mode === 'live' ? 'Live mode: document text is sent to your configured embedding provider. Questions and retrieved passages are sent to your model provider. Collections are not saved to disk.' : 'Local mode: no model calls and no document text leaves this server. Answers are verbatim excerpts, using lexical retrieval. Enable live mode for semantic search and synthesis.';
   if (status.vector_backend === 'pinecone') $('#privacy-note').append(node('p', '', 'Pinecone stores vectors and passage text remotely in an isolated namespace. PDFs and session state remain local; remote vectors alone do not restore a collection after restart.'));
   if (!status.configured) toast(status.configuration_message || 'Check your local .env configuration.');
+  await restoreCollection();
 }).catch(() => { $('#mode-badge').textContent = 'SERVER UNAVAILABLE'; toast('Cannot reach Evidence Atlas RAG. Start the Python server and reload.'); });

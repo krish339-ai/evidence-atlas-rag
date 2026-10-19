@@ -6,7 +6,7 @@ A local PDF evidence workspace built with LangChain and LangGraph. The default s
 
 **Original research-sample scope:** My RAG app helps AI learners answer research questions from the RAG, Self-RAG, and CRAG papers in a web app, targeting 95% faithfulness and responses within 15 seconds.
 
-Those are targets, not verified achievements. This first version works without credentials in **local excerpt mode**. Live semantic embeddings and generated answers need model configuration. Live results and the faithfulness goal remain unverified.
+Those are targets, not verified achievements. This first version works without credentials in **local excerpt mode**. Live semantic embeddings and generated answers need model configuration. Live spot checks have succeeded; aggregate faithfulness and latency remain unmeasured.
 
 ## Start, stop, and restart on Windows
 
@@ -126,7 +126,7 @@ Question -> dense + sparse ranks -> reciprocal rank fusion (top 6)
 
 Comparisons reserve coverage for selected papers. If more than six papers are selected, the first pass may need expansion to cover them. In live mode, the model writes claims and selects evidence IDs. The application attaches each cited passage's original text as the supporting quote, avoiding punctuation corruption from model transcription. Citation and quote validation still run, and a second model call checks whether the passage supports the whole claim. This is a useful defense, not a proof of semantic correctness. Every accepted generated claim is labeled `Reported finding` or `Interpretation`; uncited model explanations are never surfaced.
 
-`ANSWER NOT VERIFIED` means a draft failed citation, completeness, or evidence-audit checks; the message identifies the failed check. This differs from retrieval finding insufficient evidence or the model reporting insufficient support. Rejected claims are withheld. **Export trail** includes retrieved passages, page references, the workflow, and the rejection reason even when no answer was accepted. Exports contain source document text; treat them with the same care as the original PDFs.
+`ANSWER NOT VERIFIED` means a draft failed citation, completeness, or evidence-audit checks; the message identifies the failed check. Generation and auditing explicitly preserve material exceptions, conditions, affected groups, and provision-specific dates. A local guard also withholds broad claims that omit explicit parenthetical exclusions in their matching source sentence, even if a model would approve them. This guard is conservative and limited to recognizable wording; semantic auditing and human source review remain necessary. This differs from retrieval finding insufficient evidence or the model reporting insufficient support. Rejected claims are withheld. **Export trail** includes retrieved passages, page references, the workflow, and the rejection reason even when no answer was accepted. Exports contain source document text; treat them with the same care as the original PDFs. Failed question requests remain visible as **REQUEST FAILED**, with the question preserved for retry.
 
 The reading matrix is **retrieved excerpts**, not a generated comparative conclusion. Its four dimensions are methods, datasets, findings, and limitations. Missing matches are explicit. Neither it nor the question view claims that differing experiments are directly comparable.
 
@@ -143,7 +143,7 @@ The displayed workflow trace is local application data. LangSmith remote tracing
 
 With Node.js installed, run `node --test tests/test_export.cjs` for the browser export, suggestion-button, and question-box regression tests. Node.js is not required to run the application.
 
-The latest run passed **50 Python tests and 7 browser-function tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, exact Unicode source quotes, specific validation failures, audit assessment before the final decision, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, the optional Pinecone adapter using mocks, source-derived upload suggestions, one-click submission, question-box clearing and draft preservation, and exports with or without accepted answers. Mocked live tests are not real provider validation.
+The latest run passed **63 Python tests and 12 browser-function tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, exact Unicode source quotes, specific validation failures, audit assessment before the final decision, omitted-exception rejection despite an optimistic audit, preserved exclusions and narrower claims, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, Pinecone metadata-mutation isolation and reserved evidence fields, source-derived upload suggestions, one-click submission, persistent request errors, question-box clearing and draft preservation, and exports with or without accepted answers. Mocked live tests are not real provider validation.
 
 The [evaluation report](evaluation/REPORT.md) and [raw results](evaluation/results.json) record 14 questions, including 10 evidence-annotated direct/cross-paper questions and 4 fallback/ambiguous/adversarial cases:
 
@@ -169,3 +169,11 @@ The [project documentation](docs/PROJECT_DOCUMENTATION.md) is the detailed recor
 The implementation was checked against the official [LangGraph graph API](https://docs.langchain.com/oss/python/langgraph/graph-api) and [LangChain in-memory vector store API](https://reference.langchain.com/python/langchain-core/vectorstores/in_memory/InMemoryVectorStore). These informed the StateGraph and store implementation.
 
 The CMS checks can be regenerated with `python -m scripts.evaluate_healthcare`; the command forces demo/memory and disables dotenv loading. CI also verifies the downloaded CMS PDFs against their pinned hashes and committed source excerpts.
+
+## Current live verification and refresh behavior
+
+The main live/memory app and a separate live/Pinecone instance have passed bounded integration checks. Pinecone was configured for 1536-dimensional external dense vectors, cosine, serverless AWS us-east-1. A four-page public PDF produced twelve chunks; a later public answer retained its payer exception. See [the verification record](docs/VERIFICATION.md) for failures, fixes and limits, and [Pinecone architecture and setup](docs/PINECONE.md) for illustrated details.
+
+The same tab restores its uploaded collection and document selection after refresh while the backend stays running. This reads an existing descriptor and does not re-embed or upsert. Browser storage contains only collection/selection IDs. Server restart still clears the local catalog and PDFs; Pinecone vectors alone do not restore a workspace. Closing the tab ends its saved selection. Old running servers need one restart to load these code changes.
+
+Live generation now constrains citations to retrieved IDs and asks for separately cited list entries. Local guards reject recognizable omitted exceptions and numbers/acronyms/product spellings absent from a claim's own quote. These conservative checks can reject valid paraphrases or new abbreviations; they supplement, rather than prove, semantic support. A model-approved answer still requires source review. Private replay results and synthetic checks are distinguished in the verification record.

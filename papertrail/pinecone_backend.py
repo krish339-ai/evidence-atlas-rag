@@ -48,7 +48,9 @@ def build_pinecone_store(chunks, embedding, config, client_factory=None, store_f
     store = store_factory(index=remote, embedding=embedding, namespace=namespace)
     ids = [d.metadata['chunk_id'] for d in chunks]
     try:
-        store.add_documents(chunks, ids=ids)
+        # PineconeVectorStore inserts its text field into each metadata dict.
+        # Keep those transport mutations out of the local citation corpus.
+        store.add_documents([doc.model_copy(deep=True) for doc in chunks], ids=ids)
         # Pinecone is eventually consistent. Bound the readiness wait at ingestion.
         deadline = time.monotonic() + 12
         while True:

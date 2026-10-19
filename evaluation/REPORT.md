@@ -41,3 +41,7 @@ Faithfulness target: 95% supported factual claims / evaluated factual claims. A 
 Latency target: 15 seconds end to end after ingestion. Provider request timeouts are failure limits, not proof of this target. Record misses and provider/model versions. Use a separate held-out set after tuning.
 
 Failure analysis: exact terms can retrieve references or related-work discussions rather than the target method; lexical overlap can return excerpts for unanswerable questions; top-k may omit one side of a comparison. Paper balancing can help coverage while displacing another useful passage. None of these checks prove entailment.
+
+## Later integration work
+
+The saved measurements above remain unchanged. Later live/memory and live/Pinecone integration checks, citation fixes, and refresh verification are recorded separately in [VERIFICATION.md](../docs/VERIFICATION.md). They are not additional benchmark cases or aggregate faithfulness measurements.

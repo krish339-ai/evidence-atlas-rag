@@ -7,7 +7,7 @@ from typing import Literal, TypedDict
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langsmith import tracing_context
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
 from papertrail.retrieval import tokens
 from papertrail.samples import CMS_SCOPE, scope_refusal
@@ -18,6 +18,15 @@ Answer the user's exact question; if essential evidence is missing, mark suffici
 For a comparison, cover every selected paper and distinguish methods, datasets, findings, limitations.
 Do not claim one method wins when datasets, metrics, or conditions differ. Mention this limitation.
 Every claim must have one evidence ID whose passage supports the WHOLE claim.
+Preserve material exceptions, excluded groups, conditions, and limits from the source.
+If you state a rule for a broad group, include its applicable exclusion in that same claim,
+using the source's group names. Correct numbers with an omitted exception are not a supported claim.
+A claim restricted to a supported narrower group need not list unrelated exclusions.
+Support each date with evidence for that specific provision; do not borrow a nearby provision's date
+or treat a date in the question as evidence. Split claims when their facts need different citations.
+For lists, split the answer into separately cited claims whenever items span passages. Never attach
+an entire multi-passage list to one source ID. Include all requested items supported by the supplied
+passages. Preserve source spellings for acronyms, product names, and numbers; do not invent abbreviations.
 Select the passage by its exact ID. The application copies its original text as the supporting quote;
 do not reproduce, rewrite, or escape the passage text in your response.
 Label factual reports as Reported finding and deductions as Interpretation. Avoid outside knowledge.
@@ -32,6 +41,15 @@ and whether the answer covers all essential parts of the question. Then set the 
 consistently with that explanation. Use only the supplied evidence, not outside knowledge.
 Headings, labels, and list entries can directly establish facts; a source need not express them in a
 standalone sentence. A quote may include unrelated surrounding text without invalidating a supported claim.
+For EACH claim, compare who the rule applies to, what it requires, exclusions, conditions, and dates.
+Reject a broader claim that omits or contradicts a material payer/population exception, even if its
+numbers are correct and the exception is visible in the quote. The quote does not repair the claim.
+For example, a rule for impacted payers excluding a named group cannot become a rule for all impacted
+payers. A correctly supported narrower claim does not need exceptions outside its stated scope.
+Dates must be linked to the claimed provision in its cited evidence, not merely present elsewhere
+in the passage or supplied by the question. Reject unsupported transfers between neighboring provisions.
+For lists, check EACH item against that claim's own quote. A plausible item, a similar pattern, or a
+fact likely present elsewhere in the document is NOT support. Never infer an unseen role or skill.
 Set supported=true only if every whole claim is supported, interpretations are qualified, all essential
 parts of the question are answered, and cross-study comparisons do not assert equivalence of incompatible
 experiments. Set supported=false if any of these checks fails. This is an entailment check, not a check
@@ -52,7 +70,7 @@ class Draft(BaseModel):
 
 
 class SourceClaim(BaseModel):
-    text: str
+    text: str = Field(description='One factual statement fully supported by a single passage. For roles, write one role per claim. For skills, group only items found together in that passage. Never combine facts from different passages in this text.')
     evidence_id: str
     kind: Literal['Reported finding', 'Interpretation'] = 'Reported finding'
 
@@ -60,6 +78,17 @@ class SourceClaim(BaseModel):
 class SourceDraft(BaseModel):
     sufficient: bool
     claims: list[SourceClaim] = Field(max_length=8)
+
+
+def source_draft_schema(evidence):
+    """Constrain generation to this request's citations, not document/chunk IDs."""
+    ids = tuple(dict.fromkeys(item['id'] for item in evidence))
+    if not ids:
+        raise ValueError('Cannot generate an answer without retrieved passages')
+    selected_claim = create_model('RetrievedSourceClaim', __base__=SourceClaim,
+                                  evidence_id=(Literal[ids], Field(description='Exact retrieved passage ID')))
+    return create_model('RetrievedSourceDraft', __base__=SourceDraft,
+                        claims=(list[selected_claim], Field(max_length=8)))
 
 
 class Audit(BaseModel):
@@ -81,7 +110,9 @@ class State(TypedDict, total=False):
 
 
 def evidence_items(docs):
-    return [dict(id=f'E{i+1}', text=d.page_content, **d.metadata) for i, d in enumerate(docs)]
+    # Transport metadata can contain reserved keys (including Pinecone's text).
+    # Evidence identifiers and text must always come from our current documents.
+    return [{**d.metadata, 'id': f'E{i+1}', 'text': d.page_content} for i, d in enumerate(docs)]
 
 
 def validate_claims(draft, evidence):
@@ -115,6 +146,74 @@ def attach_source_quotes(draft, evidence):
     return (resolved, None) if validate_claims(resolved, evidence) else (None, 'invalid_quote')
 
 
+EXCLUSION = re.compile(
+    r'\b(?P<subject>[\w-]+\s+[\w-]+)\s*'
+    r'\(\s*(?:excluding|except(?:\s+for)?|other\s+than)\s+(?P<group>[^()]+)\)',
+    re.I,
+)
+EXCLUSION_MARKER = re.compile(
+    r'\b(?:excluding|except(?:\s+for)?|other\s+than|does\s+not\s+apply\s+to|'
+    r'do\s+not\s+apply\s+to|not\s+applicable\s+to)\b', re.I,
+)
+
+
+def omitted_source_exception(draft):
+    """Conservative guard for explicit parenthetical exclusions in a matching rule.
+
+    This supplements semantic auditing, not an entailment proof. Inspect the best
+    matching source sentence, not every exception anywhere in the attached chunk.
+    Only a claim repeating the source's broad subject triggers the guard. Keep
+    qualified/narrower claims and unrelated rules available to the semantic audit.
+    """
+    for claim in draft.claims:
+        text = re.sub(r'\s+', ' ', claim.text).strip()
+        sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', re.sub(r'\s+', ' ', claim.quote).strip())
+        claim_terms = set(tokens(text))
+        scored = []
+        for sentence in sentences:
+            # Exclude the exception itself when matching the underlying rule so
+            # its omission does not make an unrelated sentence rank higher.
+            rule = EXCLUSION.sub(lambda m: m['subject'], sentence)
+            source_terms = set(tokens(rule))
+            similarity = len(claim_terms & source_terms) / max(1, len(claim_terms | source_terms))
+            scored.append((similarity, sentence))
+        best = max((score for score, _ in scored), default=0)
+        for score, sentence in scored:
+            if score != best or score < .25:
+                continue
+            for exclusion in EXCLUSION.finditer(sentence):
+                subject = re.escape(exclusion['subject'])
+                if not re.search(r'\b' + subject + r'\b', text, re.I):
+                    continue
+                required = set(tokens(exclusion['group']))
+                # Require the named group in an exclusion clause of THIS claim;
+                # a mention in another claim or in the quote is not sufficient.
+                retained = any(required <= set(tokens(part)) for part in re.split(r'[.;]', text)
+                               if EXCLUSION_MARKER.search(part))
+                if required and not retained:
+                    return True
+    return False
+
+
+LITERAL_DETAIL = re.compile(r'\b(?:[A-Z]{2,}[A-Za-z0-9]*|[A-Z][a-z]+[A-Z][A-Za-z0-9]*|\d+(?:[.,]\d+)*)\b')
+NUMBER_WORDS = dict(zip('zero one two three four five six seven eight nine ten eleven twelve'.split(), map(str, range(13))))
+
+
+def literal_terms(text):
+    return {NUMBER_WORDS.get(word, word) for word in re.findall(r'\w+', re.sub(r'(?<=\d),(?=\d{3}\b)', '', text).casefold())}
+
+
+def unsupported_literal_details(draft):
+    """Fail closed on absent numbers/acronyms/product spellings, not semantic proof.
+
+    This catches multi-passage lists assigned to one quote. It can reject a valid
+    new abbreviation; generation is instructed to preserve source spellings.
+    Presence still does not establish a relationship or provision-specific date.
+    """
+    return any(not literal_terms(detail) <= literal_terms(claim.quote)
+               for claim in draft.claims for detail in LITERAL_DETAIL.findall(claim.text))
+
+
 def reject_answer(state, reason):
     messages = {
         'model_insufficient': 'The model reported that the retrieved passages were insufficient to answer. Review the source passages; the model may have missed relevant evidence.',
@@ -122,6 +221,8 @@ def reject_answer(state, reason):
         'unknown_citation': 'The model cited a passage that was not retrieved. The answer was withheld; review the source passages.',
         'invalid_quote': 'The supporting quote could not be verified against its source. The answer was withheld; review the source passages.',
         'incomplete_coverage': 'The generated comparison did not cite every selected document. The answer was withheld; review the source passages.',
+        'omitted_exception': 'The generated answer omitted an explicit source exception for the group it described. The answer was withheld; review the source passages.',
+        'unsupported_details': 'The generated answer includes numbers, acronyms, or named tools absent from its cited passage. The answer was withheld; review the source passages.',
         'audit_rejected': 'The generated answer did not pass the evidence support check. The answer was withheld; review the source passages.',
     }
     return {'result': {'status': 'insufficient' if reason == 'model_insufficient' else 'unverified',
@@ -175,13 +276,17 @@ def make_graph(index, config, sample_id=None):
                             'Do not turn general medical-record criteria or a future API documentation feature into a universal submission checklist. '
                             'Use 2026 amendments for reopening; do not omit the inpatient restriction in 422.616(e). '
                             'If the selected passages do not support the requested setting, date, or payer, mark sufficient=false.') if sample_id == 'cms-ma' else ''
-            proposed = model.with_structured_output(SourceDraft, method='json_schema').invoke([('system', SYSTEM_PROMPT + scope_prompt), ('human', payload)])
+            proposed = model.with_structured_output(source_draft_schema(state['evidence']), method='json_schema').invoke([('system', SYSTEM_PROMPT + scope_prompt), ('human', payload)])
             draft, failure = attach_source_quotes(proposed, state['evidence'])
             if failure:
                 return reject_answer(state, failure)
             cited = {next(e['paper_id'] for e in state['evidence'] if e['id'] == c.evidence_id) for c in draft.claims}
             if state['comparison'] and not set(state['paper_ids']) <= cited:
                 return reject_answer(state, 'incomplete_coverage')
+            if omitted_source_exception(draft):
+                return reject_answer(state, 'omitted_exception')
+            if unsupported_literal_details(draft):
+                return reject_answer(state, 'unsupported_details')
             audit = model.with_structured_output(Audit, method='json_schema').invoke([
                 ('system', AUDIT_PROMPT),
                 ('human', json.dumps({'question': state['question'], 'scope': scope_prompt, 'answer': draft.model_dump()}, ensure_ascii=False)),

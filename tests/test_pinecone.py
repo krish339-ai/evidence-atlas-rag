@@ -74,6 +74,9 @@ def test_isolated_namespaces_and_existing_index_only():
     class Store:
         def __init__(self, **kwargs): self.namespace = kwargs['namespace']
         def add_documents(self, docs, ids):
+            # Mirror the real adapter's mutation rather than a read-only fake.
+            for doc in docs:
+                doc.metadata['text'] = doc.page_content
             calls.append((self.namespace, ids))
             stats[self.namespace] = {'vector_count': len(docs)}
 
@@ -83,6 +86,7 @@ def test_isolated_namespaces_and_existing_index_only():
     assert one != two and one.startswith('evidence-atlas-') and two.startswith('evidence-atlas-')
     assert all(ids == ['fixture:1:0'] for namespace, ids in calls)
     assert len(calls) == 2
+    assert docs[0].metadata == {'chunk_id': 'fixture:1:0'}
 
 
 def test_dimension_probe_blocks_all_pinecone_operations():

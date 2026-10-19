@@ -10,7 +10,7 @@ Use the exact primer and six-field framework from `project-brief.html`. The 95% 
 
 ## Datasets
 
-The starter corpus consists of version-pinned RAG, Self-RAG, and CRAG PDFs from arXiv. See `data/sources.json` for authors and URLs and `data/download-record.json` for byte hashes. User uploads are optional. Synthetic fixtures are authored solely for deterministic testing and are not research evidence.
+The default sample uses selected CMS Medicare Advantage guidance. The secondary research corpus consists of version-pinned RAG, Self-RAG, and CRAG PDFs from arXiv. See `data/sources.json` for authors and URLs and `data/download-record.json` for byte hashes. User uploads are optional. Synthetic fixtures are authored solely for deterministic testing and are not research evidence.
 
 ## Prompts and agent instructions
 
@@ -30,11 +30,18 @@ Codex assisted with implementation, dependency debugging, browser inspection, an
 
 Preserving page boundaries makes citations inspectable but may split an argument across pages. Hybrid retrieval helps some exact terms and cross-paper coverage but can displace other relevant chunks. Quote existence is not entailment; the live path also audits support, and human review remains necessary. The local embedding mode is lexical, not semantic. Multi-column PDFs can extract awkwardly and references can outrank substantive content.
 
-No live provider was configured during the first build. Mocked model tests check routing and containment only. Live faithfulness, response latency, compatibility with a chosen provider, and the full generated-answer user journey remain to be verified.
+No live provider was configured during the first build. Mocked model tests check routing and containment only. Later live/memory and live/Pinecone checks succeeded; see VERIFICATION.md. Aggregate faithfulness and response latency remain unmeasured.
 
 ## Next validation steps
 
-- Configure a live model provider and review generated claims against the original papers.
+- Extend live source review to held-out questions and resolve unexplained support rejections without weakening the audit.
 - Measure faithfulness, answer coverage, false refusals, and end-to-end latency.
 - Expand to held-out questions and additional papers.
 - Record the demo after updating its narrative with actual measured results.
+
+## Latest reliability changes
+
+- Pinecone receives independent document copies so transport metadata cannot alter local evidence. Evidence IDs and text are assigned authoritatively by the application.
+- Generation is constrained to the retrieved citation IDs. Quotes are copied locally; omitted explicit source exceptions are rejected before semantic auditing.
+- Browser refresh restores the active collection and selection through a read-only endpoint, with no embedding or upsert. Server restart still clears the local catalog and PDF bytes.
+- Regression checks passed: 63 Python tests and 12 browser-function tests. The original omitted-exception answer is rejected offline; a bounded public-source live replay includes the exception. Broader quality targets remain unmeasured.

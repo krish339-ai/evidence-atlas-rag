@@ -62,9 +62,17 @@ def create_collection(files, source_metadata=None, sample_id=None):
         if len(collections) >= 8:
             raise ValueError('The local server has 8 collections. Clear an existing collection or restart the server.')
         collections[cid] = dict(index=index, papers=papers, raw=raw, pages=pages, sample_id=sample_id)
-    return {'id': cid, 'papers': papers, 'chunks': len(chunks), 'pages': len({(d.metadata['paper_id'], d.metadata['page']) for d in pages}), 'mode': settings.mode,
-            'sample': sample_info(sample_id) if sample_id else None,
-            'questions': starter_questions(chunks) if not sample_id else [],
+    return describe_collection(cid, collections[cid])
+
+
+def describe_collection(cid, collection):
+    """Read existing local state without indexing or contacting a provider."""
+    index = collection['index']
+    sample_id = collection.get('sample_id')
+    return {'id': cid, 'papers': collection['papers'], 'chunks': len(index.chunks),
+            'pages': len({(d.metadata['paper_id'], d.metadata['page']) for d in collection['pages']}),
+            'mode': settings.mode, 'sample': sample_info(sample_id) if sample_id else None,
+            'questions': starter_questions(index.chunks) if not sample_id else [],
             'vector_backend': index.backend, 'namespace': index.namespace}
 
 
@@ -112,6 +120,12 @@ def get_collection(cid):
     return collections[cid]
 
 
+@app.get('/api/collections/{cid}')
+def collection_description(cid: str):
+    return Response(json.dumps(describe_collection(cid, get_collection(cid))),
+                    media_type='application/json', headers={'Cache-Control': 'no-store'})
+
+
 class Question(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
     paper_ids: list[str] = Field(default_factory=list, max_length=8)
@@ -156,7 +170,7 @@ def compare(cid: str, body: Question):
             if doc is None:
                 cells.append({'paper_id': pid, 'evidence_id': None, 'text': 'No matching passage found.'})
                 continue
-            item = dict(id=f'M{len(evidence)+1}', text=doc.page_content, **doc.metadata)
+            item = {**doc.metadata, 'id': f'M{len(evidence)+1}', 'text': doc.page_content}
             evidence.append(item)
             cells.append({'paper_id': pid, 'evidence_id': item['id'], 'text': doc.page_content})
         rows.append({'dimension': label, 'cells': cells})
