@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][ValidateSet('start', 'stop', 'restart')][string]$Action,
-    [ValidateSet('demo', 'live')][string]$Mode = 'demo'
+    [ValidateSet('demo', 'live')][string]$Mode = 'demo',
+    [ValidateSet('memory', 'pinecone')][string]$Backend = 'memory'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,6 +77,39 @@ function Get-Listeners {
     return @(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)
 }
 
+function Test-LocalConfiguration {
+    Push-Location -LiteralPath $ProjectRoot
+    try {
+        & $Python -m scripts.check_local_config
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Startup configuration check failed. No server was stopped. Fix the configuration above and retry.'
+        }
+    } finally { Pop-Location }
+}
+
+function Initialize-Startup {
+    if ($Backend -eq 'pinecone' -and $Mode -ne 'live') {
+        throw 'Pinecone requires live mode. Use restart-live-pinecone.bat.'
+    }
+    if (-not (Test-Path -LiteralPath $Python)) {
+        throw 'Python environment missing. Follow README.md > Fresh setup, then retry.'
+    }
+    # Overrides belong only to this helper and its children, never the saved .env.
+    if ($Mode -eq 'live') {
+        Remove-Item Env:PYTHON_DOTENV_DISABLED -ErrorAction SilentlyContinue
+    } else {
+        $env:PYTHON_DOTENV_DISABLED = '1'
+    }
+    $env:EVIDENCE_ATLAS_MODE = $Mode
+    $env:VECTOR_BACKEND = $Backend
+    $env:LANGCHAIN_TRACING_V2 = 'false'
+    $env:LANGSMITH_TRACING = 'false'
+    if ($Mode -eq 'live') {
+        # Local validation only, before stopping a working server. No provider calls.
+        Test-LocalConfiguration
+    }
+}
+
 function Stop-Server {
     $owned = @(Get-OwnedProcesses (Read-State))
     if (-not $owned.Count) {
@@ -100,14 +134,14 @@ function Stop-Server {
         }
     }
     Remove-Item -LiteralPath $StateFile -ErrorAction SilentlyContinue
-    Write-Host 'Evidence Atlas RAG stopped. In-memory collections have been cleared.'
+    Write-Host 'Evidence Atlas RAG stopped. Local collections have been cleared; any remote Pinecone vectors remain.'
 }
 
 function Start-Server {
     $owned = @(Get-OwnedProcesses (Read-State))
     if ($owned.Count) {
         Write-Host "A batch-managed server is already running. Open $Url"
-        Write-Host 'Use restart.bat for demo mode or restart-live.bat for live mode.'
+        Write-Host 'Use restart.bat for demo/memory, restart-live.bat for live/memory, or restart-live-pinecone.bat for live/Pinecone.'
         return
     }
     if (@(Get-Listeners).Count) {
@@ -117,18 +151,7 @@ function Start-Server {
         throw 'Python environment missing. Follow README.md > Fresh setup, then run start.bat again.'
     }
     New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null
-    # These variables apply only to this helper and its child process. Live mode
-    # allows the app to load its existing .env; never print or edit credentials.
-    if ($Mode -eq 'live') {
-        Remove-Item Env:PYTHON_DOTENV_DISABLED -ErrorAction SilentlyContinue
-    } else {
-        $env:PYTHON_DOTENV_DISABLED = '1'
-    }
-    $env:EVIDENCE_ATLAS_MODE = $Mode
-    $env:VECTOR_BACKEND = 'memory'
-    $env:LANGCHAIN_TRACING_V2 = 'false'
-    $env:LANGSMITH_TRACING = 'false'
-    Write-Host "Starting Evidence Atlas RAG in $Mode/memory mode..."
+    Write-Host "Starting Evidence Atlas RAG in $Mode/$Backend mode..."
     if ($Mode -eq 'live') {
         Write-Host 'Live document indexing and questions use your configured providers and may incur API charges.'
     }
@@ -151,15 +174,22 @@ function Start-Server {
             try {
                 $status = Invoke-RestMethod -Uri "$Url/api/status" -TimeoutSec 2
             } catch { } # Retry while the server finishes initializing.
-            if ($status -and $status.mode -eq $Mode -and $status.vector_backend -eq 'memory') {
+            if ($status -and ($status.mode -ne $Mode -or $status.vector_backend -ne $Backend)) {
+                Stop-Server
+                throw "Server mode/backend does not match requested $Mode/$Backend. The managed server was stopped; no fallback was used."
+            }
+            if ($status -and $status.mode -eq $Mode -and $status.vector_backend -eq $Backend) {
                 if (-not $status.configured) {
                     Stop-Server
                     throw "Configuration is incomplete: $($status.configuration_message)"
                 }
-                Write-Host "Ready: $Url"
+                Write-Host "Ready: $Url ($Mode/$Backend)"
                 if ($Mode -eq 'live') {
-                    Write-Host 'Live mode is configured locally; API access and billing have not been tested.'
-                    Write-Host 'Refresh the browser, confirm LIVE MODE, and reload your documents to build the semantic index.'
+                    Write-Host 'Live mode is configured locally; provider access, index compatibility and billing have not been tested.'
+                    Write-Host "Refresh the browser, confirm LIVE MODE and $Backend, and reload your documents to build the semantic index."
+                    if ($Backend -eq 'pinecone') {
+                        Write-Host 'Restart clears the local collection catalog even though remote vectors persist. Reindexing creates a new namespace.'
+                    }
                 } else {
                     Write-Host 'Click Explore CMS guidance to load the sample. No API key is needed.'
                 }
@@ -174,6 +204,15 @@ function Start-Server {
     throw "Startup timed out after 60 seconds. The managed server was stopped. See $StderrFile"
 }
 
+function Invoke-ServerAction {
+    if ($Action -ne 'stop') { Initialize-Startup }
+    switch ($Action) {
+        'start' { Start-Server }
+        'stop' { Stop-Server }
+        'restart' { Stop-Server; Start-Server }
+    }
+}
+
 # Serialize double-clicks and concurrent start/stop calls for this checkout.
 $hash = [Security.Cryptography.SHA256]::Create()
 $key = [BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($ProjectRoot.ToLowerInvariant()))).Replace('-', '')
@@ -184,11 +223,7 @@ $result = 0
 try {
     try { $locked = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $locked = $true }
     if (-not $locked) { throw 'Another start/stop operation is in progress. Wait for it to finish, then retry.' }
-    switch ($Action) {
-        'start' { Start-Server }
-        'stop' { Stop-Server }
-        'restart' { Stop-Server; Start-Server }
-    }
+    Invoke-ServerAction
 } catch {
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
     $result = 1

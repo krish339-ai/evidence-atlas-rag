@@ -18,10 +18,11 @@ Complete **Fresh setup** below once. Then double-click a batch file in the proje
 | `stop.bat` | Stops the server started by these batch files for this project. Running it when the server is already stopped is harmless. |
 | `restart.bat` | Stops the managed server and starts it again in demo/memory mode. |
 | `restart-live.bat` | Stops the managed server and starts it in live/memory mode using your existing provider configuration. Requires `MODEL_API_KEY`; document indexing and questions can incur API charges. |
+| `restart-live-pinecone.bat` | Checks local configuration, then restarts the managed server in live/Pinecone mode on the same port 8000. Requires model and Pinecone credentials, an existing index name, and the optional adapter. |
 
 Open <http://127.0.0.1:8000>. Click **Explore CMS guidance**, then ask a question or build a reading matrix. You can close the launcher window after it reports ready; the app keeps running until you use `stop.bat` or shut down Windows.
 
-`start.bat` and `restart.bat` use **demo/memory mode**, disable remote tracing, and skip loading `.env`. No model credentials or paid API calls are needed for those launchers. `restart-live.bat` explicitly selects **live/memory mode**, allows the app to load its existing `.env`, and keeps remote tracing disabled. None of the launchers edits your saved configuration. Stopping or restarting clears loaded documents, questions, and other in-memory collection state; reload your sample or PDFs afterward.
+`start.bat` and `restart.bat` use **demo/memory mode**, disable remote tracing, and skip loading `.env`. No model credentials or paid API calls are needed for those launchers. `restart-live.bat` explicitly selects **live/memory**; `restart-live-pinecone.bat` selects **live/Pinecone**. Both load the existing project `.env` and keep remote tracing disabled. Mode/backend overrides apply only to the launched process, and no launcher edits your saved configuration. Stopping or restarting clears loaded documents, questions, and the local collection catalog; reload your sample or PDFs afterward. Pinecone vectors remain remotely, but do not restore that catalog; reindexing creates a new namespace.
 
 You can also run them from PowerShell. Add `--no-pause` to skip the final keypress prompt:
 
@@ -37,7 +38,15 @@ To test generated answers, save your provider configuration locally as described
 .\restart-live.bat --no-pause
 ```
 
-Refresh the browser and confirm **LIVE MODE · MEMORY** before loading documents again. Live indexing sends document text to the configured embedding provider; questions and retrieved passages go to the model provider. The launcher checks local configuration and server readiness only; it does not make a paid test request or establish that your account has available API credit. If the key is missing, it stops the newly started server and reports a configuration error. Use `stop.bat` to stop either managed mode, or `restart.bat` to return to demo mode.
+Refresh the browser and confirm **LIVE MODE · MEMORY** before loading documents again. Live indexing sends document text to the configured embedding provider; questions and retrieved passages go to the model provider. The launcher checks local configuration and server readiness only; it does not make a paid test request or establish that your account has available API credit. Missing live configuration is reported before stopping a working server. Use `stop.bat` to stop any managed mode, or `restart.bat` to return to demo mode.
+
+To choose Pinecone instead, complete [the Pinecone setup](docs/PINECONE.md), including `MODEL_API_KEY`, `PINECONE_API_KEY`, and `PINECONE_INDEX_NAME` in the main project `.env`, then run:
+
+```powershell
+.\restart-live-pinecone.bat --no-pause
+```
+
+Open the same <http://127.0.0.1:8000>, refresh, and confirm **LIVE MODE · PINECONE**. The launcher does not read separate `.env.*` test files or silently switch to memory. A missing index name must be added to the main `.env` even if a separate test instance has it. Existing process environment variables take precedence over `.env`. The readiness check confirms the requested mode/backend, not remote credentials, billing, index compatibility or connectivity. Loading documents performs those remote operations. Use `restart-live.bat` to switch back to live/memory without editing `.env`.
 
 The files work from any current directory, including project paths containing spaces. They use the included `scripts/local-server.ps1` helper and Windows PowerShell; no administrator rights are needed. The execution-policy override applies only to that helper process, not your permanent system policy. Organization policies may still prevent scripts from running.
 
@@ -84,7 +93,7 @@ In-memory vectors are the active local backend. Pinecone is optional; live gener
 
 Set `EVIDENCE_ATLAS_MODE=live`, `VECTOR_BACKEND=pinecone`, `MODEL_API_KEY`, `PINECONE_API_KEY`, and `PINECONE_INDEX_NAME`. Confirm model names/base URLs and `EMBEDDING_DIMENSIONS` (1536 for the initial default). The adapter requires an existing, ready, externally embedded dense cosine index; it validates dimensions and metric before writing. It never creates/reconfigures an index and always allocates a fresh `evidence-atlas-...` namespace per collection.
 
-Pinecone retains vectors and passage text; PDFs, BM25 input, and the collection catalog remain process-local. **Clear collection clears local state only and does not delete remote vectors.** Reindexing creates a new namespace. Live Pinecone access is not verified; all adapter test results use mocks. No LangSmith account or remote tracing has been configured.
+Pinecone retains vectors and passage text; PDFs, BM25 input, and the collection catalog remain process-local. **Clear collection clears local state only and does not delete remote vectors.** Reindexing creates a new namespace. Bounded live Pinecone checks and a user-reported browser confirmation are recorded in [VERIFICATION.md](docs/VERIFICATION.md); they do not establish broad answer quality. The launcher itself makes no remote verification calls. Remote LangSmith tracing is disabled.
 
 ## Default healthcare sample
 
@@ -143,7 +152,7 @@ The displayed workflow trace is local application data. LangSmith remote tracing
 
 With Node.js installed, run `node --test tests/test_export.cjs` for the browser export, suggestion-button, and question-box regression tests. Node.js is not required to run the application.
 
-The latest run passed **63 Python tests and 12 browser-function tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, exact Unicode source quotes, specific validation failures, audit assessment before the final decision, omitted-exception rejection despite an optimistic audit, preserved exclusions and narrower claims, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, Pinecone metadata-mutation isolation and reserved evidence fields, source-derived upload suggestions, one-click submission, persistent request errors, question-box clearing and draft preservation, and exports with or without accepted answers. Mocked live tests are not real provider validation.
+The latest run passed **69 Python tests and 12 browser-function tests**: PDF parsing and page boundaries, invalid/scanned files, retrieval filtering and paper coverage, exact local excerpts, bounded refusal, forged citation rejection, rejected-output containment, exact Unicode source quotes, specific validation failures, audit assessment before the final decision, omitted-exception rejection despite an optimistic audit, preserved exclusions and narrower claims, mocked live generation/audit success and failure, provider failure, an upload/ask/PDF/delete API round trip, section-aware matrix selection with absent limitations, Pinecone metadata-mutation isolation and reserved evidence fields, source-derived upload suggestions, one-click submission, persistent request errors, question-box clearing and draft preservation, and exports with or without accepted answers. Mocked live tests are not real provider validation.
 
 The [evaluation report](evaluation/REPORT.md) and [raw results](evaluation/results.json) record 14 questions, including 10 evidence-annotated direct/cross-paper questions and 4 fallback/ambiguous/adversarial cases:
 

@@ -11,7 +11,7 @@ The optional adapter has mocked regression coverage and a bounded live integrati
 5. Confirm the existing index accepts externally generated **dense** vectors with the **cosine** metric. Set `EMBEDDING_DIMENSIONS` to the actual embedding output size and index dimension; the default small embedding model normally uses 1536. Integrated-embedding and sparse indexes are not supported by this adapter.
 6. Set `EVIDENCE_ATLAS_MODE=live` and `VECTOR_BACKEND=pinecone`. Keep `PINECONE_NAMESPACE_PREFIX=evidence-atlas`, or use a project-specific prefix beginning `evidence-atlas-`. Each collection gets a fresh random suffix, so the app never uses the default or an existing unrelated namespace.
 7. Install the adapter if needed: `python -m pip install -r requirements-pinecone.txt`. It is already installed in this workspace and included in the recorded complete lock file.
-8. Restart the server and load a small public sample first. The mode badge shows the configured backend, and the library shows the created namespace after indexing succeeds. Configuration presence does not imply a successful connection.
+8. On Windows, double-click `restart-live-pinecone.bat` (or run `.\restart-live-pinecone.bat --no-pause`). It explicitly selects live/Pinecone on <http://127.0.0.1:8000> without editing `.env`; `restart-live.bat` selects live/memory instead. Refresh and confirm **LIVE MODE · PINECONE**, then load a small public sample first. The library shows the created namespace after indexing succeeds. Configuration presence does not imply a successful connection.
 
 ```dotenv
 EVIDENCE_ATLAS_MODE=live
@@ -25,6 +25,10 @@ PINECONE_NAMESPACE_PREFIX=evidence-atlas
 ```
 
 The blank values above must be filled only in your ignored local `.env`. Do not commit a filled example.
+
+Both live launchers check required settings locally before stopping the batch-managed server. The Pinecone launcher also checks that the optional adapter is installed. It uses the main project `.env` and inherited process environment, with process variables taking precedence; separate `.env.*` test files are not loaded or merged. Missing `PINECONE_INDEX_NAME` must be supplied in the main configuration. No keys or index values are printed. Readiness checks require the requested live/Pinecone status and never fall back to memory. These local checks do not contact the providers or verify index access, dimensions, billing or connectivity; remote checks occur when indexing documents.
+
+The new launcher manages only this checkout's registered port-8000 process. It leaves manually started servers and other test instances alone. A restart clears the local collection catalog and PDFs even though Pinecone vectors persist; reload documents afterward, creating a new namespace. `stop.bat` stops any managed backend. `restart-live.bat` returns to live/memory and `restart.bat` returns to credential-free demo/memory, without changing saved `.env` values.
 
 ## What the adapter checks
 

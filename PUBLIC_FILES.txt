@@ -12,7 +12,11 @@ start.bat
 stop.bat
 restart.bat
 restart-live.bat
+restart-live-pinecone.bat
 scripts/local-server.ps1
+scripts/check_local_config.py
+tests/test_launcher.ps1
+tests/test_launcher_config.py
 papertrail/__init__.py
 papertrail/config.py
 papertrail/ingest.py
