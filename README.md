@@ -76,7 +76,7 @@ If `.env` does not exist, copy `.env.example` to it; otherwise edit the existing
 
 An OpenAI-compatible provider, including a suitably configured Nebius account, needs compatible chat, embedding, and JSON-schema structured-output endpoints. No Nebius model IDs, credits, account access, or compatibility have been verified. Failed requests display a configuration error and never fabricate a successful answer. Never put keys in frontend code or commit `.env`.
 
-The app is intended for a **single user on loopback**. Collections and PDF bytes stay in process memory; a restart clears them. Browser refresh currently requires reloading the collection. Clear the current collection in the sidebar; restart to clear any orphaned collections. There is no authentication or durable collection catalog. Pinecone can persist vectors and passage text remotely when explicitly configured; see below. Do not expose this development server publicly.
+The app is intended for a **single user on loopback**. Collections and PDF bytes stay in process memory; a restart clears them. A same-tab browser refresh restores the collection and selection while the server is running, without reindexing. This does not restore answer history or survive server restart. Clear the current collection in the sidebar; restart to clear any orphaned collections. There is no authentication or durable collection catalog. Pinecone can persist vectors and passage text remotely when explicitly configured; see below. Do not expose this development server publicly.
 
 ## Optional Pinecone backend
 
