@@ -87,6 +87,8 @@ To return to a credential-free local demo, set `EVIDENCE_ATLAS_MODE=demo` and `V
 
 ## Verification boundaries
 
+On October 18, 2026, the user reported that the updated isolated live/Pinecone browser experience worked after the citation and refresh fixes. This is a user-reported manual confirmation, not an instrumented quality measurement; exact queries and coverage were not recorded. See [VERIFICATION.md](VERIFICATION.md). Existing completeness and persistence limitations remain unchanged.
+
 A public four-page PDF produced twelve vectors and supported a bounded ingestion/retrieval/answer check. Human review caught an omitted payer exception despite model approval. The captured omission is rejected offline; a later public live replay included the exception and passed the audit. The transport metadata collision was corrected and live submission succeeded. Browser refresh of a nine-passage upload was verified on the root page and the private test wrapper without reindexing.
 
 Two uploaded-document questions originally failed for different reasons: unknown citation and evidence-audit rejection. A request-specific citation enum prevents selection of unprovided IDs. A subsequent bounded replay returned answers, but source review caught facts combined under one citation. The new literal-detail guard rejects those captured drafts offline. Separately cited synthetic role and skill lists passed live checks after schema clarification. A final authorized replay of the two original questions returned separately cited claims and passed the audit; individual source support was reviewed. The answers were not exhaustive lists, so completeness remains a limitation. These tests are not broad answer-quality evidence.

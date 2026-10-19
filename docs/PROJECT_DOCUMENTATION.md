@@ -54,6 +54,8 @@ The CMS scope guard returns insufficient evidence for common unsupported request
 
 **Live status:** Live/memory and isolated live/Pinecone spot checks have succeeded. The 95% faithfulness and 15-second response targets remain unmeasured. Local retrieval results do not measure generated-answer quality. See [verification](VERIFICATION.md) for bounded live evidence and limitations. Demo/memory remains the credential-free default.
 
+On October 18, 2026, the user also reported that the updated live/Pinecone browser experience worked after the citation and refresh fixes. This manual confirmation has no recorded query coverage; see the [verification record](VERIFICATION.md) for its scope, separate from automated results.
+
 The research design and numeric evaluation below are retained as **research-sample history only**. They do not measure the healthcare sample.
 
 Evidence Atlas RAG is a local research-paper reading and comparison app. Its source repository is [Evidence Atlas RAG](https://github.com/krish339-ai/evidence-atlas-rag). This document records the problem, datasets, implemented design, prompting decisions, actual iterations, and observations. The [project brief](project-brief.html) provides a compact planning reference; the [README](../README.md) provides setup instructions.

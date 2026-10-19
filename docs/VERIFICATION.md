@@ -2,6 +2,7 @@
 
 ## Latest verification — October 18, 2026
 
+- **User-reported manual browser confirmation — October 18, 2026 (America/New_York):** After testing the updated isolated live/Pinecone instance with the citation and refresh fixes, the user reported, “I tested that in the live browser and it works fine.” This is a manual user report, separate from instrumented checks. Exact queries and coverage were not recorded with this confirmation; it does not establish exhaustive correctness or change the limitations below.
 - **63 Python tests and 12 browser-function tests passed.** Tests force dummy credentials and demo/memory. New regressions cover Pinecone metadata isolation, request-specific citation IDs, explicit payer exceptions, per-claim literal details, collection restoration, selection preservation, and stale-restore races.
 - Main live/memory and isolated live/Pinecone sessions were exercised separately. Launchers still default to demo/memory; `restart-live.bat` explicitly chooses live/memory. Pinecone setup is described in [PINECONE.md](PINECONE.md).
 - The existing Pinecone index was ready: externally embedded dense vectors, 1536 dimensions, cosine, serverless AWS us-east-1. A public four-page PDF yielded twelve chunks; upsert, namespace visibility, dense retrieval and a cited answer were observed. This was an integration check, not a benchmark.
